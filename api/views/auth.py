@@ -1,4 +1,4 @@
-# api/views.py
+# api/views/auth.py
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,15 +6,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.models import User
-from django.views.decorators.csrf import csrf_exempt
-from .serializers import UserSerializer, RegisterSerializer
+from django.contrib.auth import authenticate
+from ..serializers import UserSerializer, RegisterSerializer
 
-
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
-    """Vista de registro usando función decorada"""
+    """Vista de registro"""
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
@@ -28,20 +26,15 @@ def register_view(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
-    """Vista de login usando función decorada"""
-    from django.contrib.auth import authenticate
-
+    """Vista de login"""
     username = request.data.get('username')
     password = request.data.get('password')
 
     if not username or not password:
-        return Response({
-            'error': 'Por favor proporciona username y password'
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Por favor proporciona username y password'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = authenticate(username=username, password=password)
 
@@ -54,15 +47,16 @@ def login_view(request):
             'username': user.username
         })
 
-    return Response({
-        'error': 'Credenciales inválidas'
-    }, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({'error': 'Credenciales inválidas'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        request.user.auth_token.delete()
+        try:
+            request.user.auth_token.delete()
+        except (AttributeError, Token.DoesNotExist):
+            pass # El usuario ya no tiene token, no hay nada que hacer
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class UserProfileView(APIView):

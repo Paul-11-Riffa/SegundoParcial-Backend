@@ -1,18 +1,24 @@
 # api/urls.py
 from django.urls import path
-from .views import register_view, login_view, LogoutView, UserProfileView
+from .views import (
+    register_view,
+    login_view,
+    LogoutView,
+    UserProfileView,
+    UserListView,
+    UserDetailView
+)
 
 urlpatterns = [
-
-    # Endpoint para el registro
+    # --- Autenticación ---
     path('register/', register_view, name='register'),
-
-    # Endpoint para el login
     path('login/', login_view, name='login'),
-
-    # Endpoint para el logout
     path('logout/', LogoutView.as_view(), name='logout'),
 
-    # Endpoint para ver/gestionar el perfil
+    # --- Perfil de Usuario (para el usuario logueado) ---
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+
+    # --- Gestión de Usuarios (SOLO ADMINS) ---
+    path('users/', UserListView.as_view(), name='user-list'),
+    path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
 ]
