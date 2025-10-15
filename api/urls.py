@@ -1,7 +1,18 @@
+# api/urls.py
 from django.urls import path
-from . import views
+from .views import register_view, login_view, LogoutView, UserProfileView
 
 urlpatterns = [
-    # Agrega tus rutas aquí
-    # path('ejemplo/', views.ejemplo_view, name='ejemplo'),
+
+    # Endpoint para el registro
+    path('register/', register_view, name='register'),
+
+    # Endpoint para el login
+    path('login/', login_view, name='login'),
+
+    # Endpoint para el logout
+    path('logout/', LogoutView.as_view(), name='logout'),
+
+    # Endpoint para ver/gestionar el perfil
+    path('profile/', UserProfileView.as_view(), name='user-profile'),
 ]
