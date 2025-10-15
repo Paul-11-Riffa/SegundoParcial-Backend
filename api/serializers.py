@@ -30,3 +30,25 @@ class RegisterSerializer(serializers.ModelSerializer):
             last_name=validated_data.get('last_name', '')
         )
         return user
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer()
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'profile')
+
+    def update(self, instance, validated_data):
+        # Extraer los datos del perfil si existen
+        profile_data = validated_data.pop('profile', None)
+
+        # Actualizar los datos del perfil
+        if profile_data:
+            profile_serializer = self.fields['profile']
+            profile_instance = instance.profile
+            profile_serializer.update(profile_instance, profile_data)
+
+        # Actualizar los datos del usuario
+        super().update(instance, validated_data)
+
+        return instance
