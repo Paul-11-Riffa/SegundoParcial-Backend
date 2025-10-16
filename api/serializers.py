@@ -3,10 +3,12 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Profile
 
+
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ('role',)
+
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer()
@@ -14,6 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'first_name', 'last_name', 'profile')
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -31,24 +34,41 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
+
 class AdminUserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer()
+    password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'profile')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'password', 'profile')
+        # Hacemos que el email sea requerido al crear
+        extra_kwargs = {'email': {'required': True}}
+
+    # --- MÉTODO create AÑADIDO ---
+    def create(self, validated_data):
+        profile_data = validated_data.pop('profile')
+        # Usamos create_user para hashear la contraseña correctamente
+        user = User.objects.create_user(**validated_data)
+
+        # Asignamos el rol del perfil
+        Profile.objects.filter(user=user).update(**profile_data)
+
+        return user
 
     def update(self, instance, validated_data):
-        # Extraer los datos del perfil si existen
         profile_data = validated_data.pop('profile', None)
+        password = validated_data.pop('password', None)
 
-        # Actualizar los datos del perfil
         if profile_data:
             profile_serializer = self.fields['profile']
             profile_instance = instance.profile
             profile_serializer.update(profile_instance, profile_data)
 
-        # Actualizar los datos del usuario
         super().update(instance, validated_data)
+
+        if password:
+            instance.set_password(password)
+            instance.save()
 
         return instance
