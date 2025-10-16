@@ -26,17 +26,32 @@ def register_view(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# segundoparcial-backend/api/views/auth.py
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
-    """Vista de login"""
-    username = request.data.get('username')
+    """Vista de login mejorada (acepta username o email)"""
+    # Aquí definimos la variable 'identifier'
+    identifier = request.data.get('username')
     password = request.data.get('password')
 
-    if not username or not password:
-        return Response({'error': 'Por favor proporciona username y password'}, status=status.HTTP_400_BAD_REQUEST)
+    if not identifier or not password:
+        return Response(
+            {'error': 'Por favor proporciona un usuario/email y contraseña'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    user = authenticate(username=username, password=password)
+    # La usamos aquí
+    user = authenticate(username=identifier, password=password)
+
+    if user is None:
+        try:
+            # Y la usamos aquí también
+            user_by_email = User.objects.get(email=identifier)
+            user = authenticate(username=user_by_email.username, password=password)
+        except User.DoesNotExist:
+            user = None
 
     if user:
         token, created = Token.objects.get_or_create(user=user)
