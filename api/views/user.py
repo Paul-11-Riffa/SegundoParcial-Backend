@@ -1,13 +1,14 @@
-# api/views/users.py
+# api/views/user.py
 from rest_framework import generics, status
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from ..serializers import AdminUserSerializer
 from ..permissions import IsAdminUser
 
-class UserListView(generics.ListAPIView):
+# CAMBIO: Cambiamos ListAPIView por ListCreateAPIView
+class UserListView(generics.ListCreateAPIView):
     """
-    Vista para listar todos los usuarios.
+    Vista para listar y CREAR usuarios.
     Solo accesible por administradores.
     """
     queryset = User.objects.all()
@@ -25,7 +26,6 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Evitar que un admin se elimine a sí mismo
         if instance == request.user:
             return Response({"error": "No puedes eliminar tu propia cuenta de administrador."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_destroy(instance)
