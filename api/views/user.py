@@ -30,3 +30,18 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
             return Response({"error": "No puedes eliminar tu propia cuenta de administrador."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class ClientListView(generics.ListAPIView):
+    """
+    Vista para listar solo a los usuarios con el rol de 'CLIENTE'.
+    Solo accesible por administradores.
+    """
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        """
+        Este método filtra el queryset para devolver solo los usuarios
+        cuyo perfil tiene el rol 'CLIENT'.
+        """
+        return User.objects.filter(profile__role='CLIENT')

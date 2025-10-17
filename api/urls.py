@@ -8,7 +8,8 @@ from .views import (
     UserListView,
     UserDetailView,
     PasswordResetRequestView,  # <-- Importar
-    PasswordResetConfirmView
+    PasswordResetConfirmView,
+    ClientListView
 )
 
 urlpatterns = [
@@ -23,5 +24,6 @@ urlpatterns = [
 
     # --- Gestión de Usuarios (SOLO ADMINS) ---
     path('users/', UserListView.as_view(), name='user-list'),
+path('clients/', ClientListView.as_view(), name='client-list'),
     path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
 ]
