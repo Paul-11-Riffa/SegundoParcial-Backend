@@ -72,3 +72,18 @@ class AdminUserSerializer(serializers.ModelSerializer):
             instance.save()
 
         return instance
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """
+    Serializador para solicitar el reseteo de contraseña.
+    Valida que se envíe un email.
+    """
+    email = serializers.EmailField(required=True)
+
+class SetNewPasswordSerializer(serializers.Serializer):
+    """
+    Serializador para confirmar el reseteo con la nueva contraseña.
+    """
+    password = serializers.CharField(write_only=True, required=True)
+    token = serializers.CharField(write_only=True, required=True)
+    uidb64 = serializers.CharField(write_only=True, required=True)

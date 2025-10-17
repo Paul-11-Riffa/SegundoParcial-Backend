@@ -6,7 +6,9 @@ from .views import (
     LogoutView,
     UserProfileView,
     UserListView,
-    UserDetailView
+    UserDetailView,
+    PasswordResetRequestView,  # <-- Importar
+    PasswordResetConfirmView
 )
 
 urlpatterns = [
@@ -14,7 +16,8 @@ urlpatterns = [
     path('register/', register_view, name='register'),
     path('login/', login_view, name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
-
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     # --- Perfil de Usuario (para el usuario logueado) ---
     path('profile/', UserProfileView.as_view(), name='user-profile'),
 
