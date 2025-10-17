@@ -7,13 +7,14 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from ..serializers import UserSerializer, RegisterSerializer
+from ..serializers import UserSerializer, RegisterSerializer, UserProfileUpdateSerializer
 from rest_framework import generics
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail
 from ..serializers import PasswordResetRequestSerializer, SetNewPasswordSerializer
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -84,8 +85,22 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Devuelve los datos del perfil del usuario logueado."""
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+    def put(self, request):
+        """Actualiza el perfil del usuario logueado."""
+        user = request.user
+        # Usamos el nuevo serializador para validar y guardar los datos
+        serializer = UserProfileUpdateSerializer(user, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            # Devolvemos el perfil completo y actualizado
+            return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PasswordResetRequestView(generics.GenericAPIView):
@@ -154,3 +169,5 @@ class PasswordResetConfirmView(generics.GenericAPIView):
             return Response({'detail': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
         else:
             return Response({'detail': 'Invalid token or user ID.'}, status=status.HTTP_400_BAD_REQUEST)
+
+

@@ -87,3 +87,49 @@ class SetNewPasswordSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
     token = serializers.CharField(write_only=True, required=True)
     uidb64 = serializers.CharField(write_only=True, required=True)
+
+
+# api/serializers.py
+# ... (debajo de las otras clases de serializadores)
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializador para que un usuario actualice su propio perfil.
+    Solo permite actualizar username, email y una nueva contraseña (opcional).
+    """
+    email = serializers.EmailField(required=False)
+    # La contraseña es opcional y solo de escritura
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        # Definimos los únicos campos permitidos para la actualización
+        fields = ('username', 'email', 'password')
+        extra_kwargs = {
+            'username': {'required': False},
+        }
+
+    def validate_username(self, value):
+        # Valida que el nuevo username no esté en uso por otro usuario.
+        if self.instance and User.objects.exclude(pk=self.instance.pk).filter(username=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_email(self, value):
+        # Valida que el nuevo email no esté en uso por otro usuario.
+        if self.instance and User.objects.exclude(pk=self.instance.pk).filter(email=value).exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return value
+
+    def update(self, instance, validated_data):
+        # Actualiza el username y email si se proporcionaron
+        instance.username = validated_data.get('username', instance.username)
+        instance.email = validated_data.get('email', instance.email)
+
+        # Si el usuario envió una nueva contraseña, la hasheamos de forma segura
+        password = validated_data.get('password', None)
+        if password:
+            instance.set_password(password)
+
+        instance.save()
+        return instance
