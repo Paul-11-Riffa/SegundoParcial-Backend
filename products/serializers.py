@@ -1,0 +1,38 @@
+from rest_framework import serializers
+from .models import Category, Product
+
+class CategorySerializer(serializers.ModelSerializer):
+    """
+    Serializador para el modelo de Categorías.
+    """
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug']
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    """
+    Serializador para el modelo de Productos.
+    """
+    # Para mostrar el nombre de la categoría en lugar de solo su ID.
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = Product
+        # Incluimos todos los campos del modelo y el campo extra 'category_name'.
+        fields = [
+            'id',
+            'category',
+            'category_name',
+            'name',
+            'description',
+            'price',
+            'stock',
+            'image',
+            'created_at',
+            'updated_at'
+        ]
+        # Hacemos que 'category' sea de solo escritura, ya que mostramos 'category_name' para leer.
+        extra_kwargs = {
+            'category': {'write_only': True}
+        }
