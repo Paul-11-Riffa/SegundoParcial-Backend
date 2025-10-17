@@ -360,3 +360,26 @@ class GenerateOrderReceiptPDF(views.APIView):
         p.save()
 
         return response_pdf
+
+# --- NUEVA VISTA PARA LAS ÓRDENES DEL CLIENTE LOGUEADO ---
+class MyOrderListView(generics.ListAPIView):
+    """
+    Endpoint para que un cliente vea su propio historial de órdenes
+    (incluyendo carritos pendientes y ventas completadas).
+    """
+    permission_classes = [permissions.IsAuthenticated] # Solo usuarios logueados
+    serializer_class = OrderSerializer
+
+    def get_queryset(self):
+        """
+        Filtra las órdenes para devolver solo las del usuario actual,
+        excluyendo carritos pendientes Y vacíos.
+        """
+        user = self.request.user
+        # Obtenemos todas las órdenes del usuario
+        queryset = Order.objects.filter(customer=user)
+        # --- CAMBIO AQUÍ: Excluimos las que son PENDING y no tienen items ---
+        queryset = queryset.exclude(status='PENDING', items__isnull=True)
+        # -----------------------------------------------------------------
+        # Ordenamos por fecha, las más recientes primero
+        return queryset.order_by('-created_at')
