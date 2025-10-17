@@ -1,3 +1,4 @@
+import django_filters
 from rest_framework import views, response, status, permissions, generics
 from .models import Order, OrderItem, Product
 from .serializers import OrderSerializer
@@ -9,7 +10,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.units import inch
-
+from .filters import OrderFilter
 class CartView(views.APIView):
     """
     Vista para gestionar el carrito de compras del usuario.
@@ -282,6 +283,8 @@ class SalesHistoryView(generics.ListAPIView):
     """
     permission_classes = [permissions.IsAdminUser]
     serializer_class = OrderSerializer
+    filterset_class = OrderFilter
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
 
     def get_queryset(self):
         """
