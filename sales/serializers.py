@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Order, OrderItem
 from products.serializers import ProductSerializer
+from api.serializers import UserSerializer
 
 class OrderItemSerializer(serializers.ModelSerializer):
     """
@@ -20,6 +21,7 @@ class OrderSerializer(serializers.ModelSerializer):
     """
     # 'items' será una lista de todos los artículos en el carrito.
     items = OrderItemSerializer(many=True, read_only=True)
+    customer = UserSerializer(read_only=True)
 
     class Meta:
         model = Order

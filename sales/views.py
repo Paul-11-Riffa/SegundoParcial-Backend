@@ -1,4 +1,4 @@
-from rest_framework import views, response, status, permissions
+from rest_framework import views, response, status, permissions, generics
 from .models import Order, OrderItem, Product
 from .serializers import OrderSerializer
 from django.conf import settings
@@ -267,3 +267,17 @@ class ManualOrderCompletionView(views.APIView):
             return response.Response({'error': f'No pending order found for user {user_id}.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return response.Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# --- NUEVA VISTA PARA EL HISTORIAL DE VENTAS (SOLO ADMINS) ---
+class SalesHistoryView(generics.ListAPIView):
+    """
+    Endpoint para que los administradores vean todas las órdenes completadas.
+    """
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = OrderSerializer
+
+    def get_queryset(self):
+        """
+        Filtra las órdenes para devolver solo las que tienen el estado 'COMPLETED'.
+        """
+        return Order.objects.filter(status='COMPLETED').order_by('-updated_at')
