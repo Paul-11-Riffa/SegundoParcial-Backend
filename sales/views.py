@@ -3,6 +3,12 @@ from .models import Order, OrderItem, Product
 from .serializers import OrderSerializer
 from django.conf import settings
 import stripe
+from django.http import HttpResponse
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle
+from reportlab.lib.units import inch
 
 class CartView(views.APIView):
     """
@@ -281,3 +287,72 @@ class SalesHistoryView(generics.ListAPIView):
         Filtra las órdenes para devolver solo las que tienen el estado 'COMPLETED'.
         """
         return Order.objects.filter(status='COMPLETED').order_by('-updated_at')
+
+# --- VISTA PARA GENERAR COMPROBANTES EN PDF ---
+class GenerateOrderReceiptPDF(views.APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request, order_id):
+        try:
+            # 1. Buscamos la orden completada
+            order = Order.objects.get(id=order_id, status='COMPLETED')
+        except Order.DoesNotExist:
+            return response.Response({'error': 'Completed order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Creamos una respuesta HTTP de tipo PDF
+        response_pdf = HttpResponse(content_type='application/pdf')
+        response_pdf['Content-Disposition'] = f'attachment; filename="receipt_order_{order.id}.pdf"'
+
+        # 3. Creamos el lienzo del PDF
+        p = canvas.Canvas(response_pdf, pagesize=letter)
+        width, height = letter
+
+        # --- DIBUJAMOS EL CONTENIDO DEL PDF ---
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(72, height - 72, "Nota de Venta / Comprobante")
+
+        p.setFont("Helvetica", 12)
+        p.drawString(72, height - 108, f"Orden N°: {order.id}")
+        p.drawString(72, height - 126, f"Fecha: {order.updated_at.strftime('%d/%m/%Y %H:%M')}")
+
+        p.drawString(width - 250, height - 108, "Cliente:")
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(width - 250, height - 126, f"{order.customer.first_name} {order.customer.last_name}")
+        p.setFont("Helvetica", 12)
+        p.drawString(width - 250, height - 144, f"(@{order.customer.username})")
+
+        p.line(72, height - 160, width - 72, height - 160) # Línea divisoria
+
+        # 4. Creamos la tabla de productos
+        table_data = [['Producto', 'Cantidad', 'Precio Unit.', 'Subtotal']]
+        for item in order.items.all():
+            subtotal = item.quantity * item.price
+            table_data.append([
+                item.product.name,
+                str(item.quantity),
+                f"${item.price:.2f} USD",
+                f"${subtotal:.2f} USD"
+            ])
+
+        table = Table(table_data, colWidths=[3.5 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A222E')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+
+        table_height = table.wrap(width, height)[1]
+        table.drawOn(p, 72, height - 200 - table_height)
+
+        # 5. Dibujamos el total al final
+        p.setFont("Helvetica-Bold", 14)
+        p.drawRightString(width - 72, height - 220 - table_height, f"Total: ${order.total_price:.2f} USD")
+
+        p.showPage()
+        p.save()
+
+        return response_pdf
