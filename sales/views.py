@@ -150,8 +150,9 @@ class StripeCheckoutView(views.APIView):
 
             # 3. Define las URLs de éxito y cancelación
             # (Estas son las páginas a las que Stripe redirigirá al usuario después del pago)
-            success_url = request.build_absolute_uri('/') + '?status=success' # Placeholder
-            cancel_url = request.build_absolute_uri('/') + '?status=cancel' # Placeholder
+            frontend_base_url = "http://localhost:3000"
+            success_url = f"{frontend_base_url}/order/success?session_id={{CHECKOUT_SESSION_ID}}"  # Pasamos el ID de sesión para verificación opcional
+            cancel_url = f"{frontend_base_url}/order/cancel"
 
             # 4. Crea la sesión de checkout en Stripe
             checkout_session = stripe.checkout.Session.create(
