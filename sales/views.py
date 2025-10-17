@@ -1,6 +1,8 @@
 from rest_framework import views, response, status, permissions
 from .models import Order, OrderItem, Product
 from .serializers import OrderSerializer
+from django.conf import settings
+import stripe
 
 class CartView(views.APIView):
     """
@@ -109,3 +111,159 @@ class CartItemView(views.APIView):
 
         serializer = OrderSerializer(cart)
         return response.Response(serializer.data)
+
+class StripeCheckoutView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        """
+        Crea una sesión de pago en Stripe con los artículos del carrito.
+        """
+        # Asigna la clave secreta de Stripe desde la configuración
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+
+        try:
+            # 1. Obtiene el carrito del usuario
+            cart = Order.objects.get(customer=request.user, status='PENDING')
+            if not cart.items.exists():
+                return response.Response({'error': 'Your cart is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 2. Prepara la lista de productos para Stripe
+            line_items = []
+            for item in cart.items.all():
+                line_items.append({
+                    'price_data': {
+                        'currency': 'usd', # Puedes cambiarlo a tu moneda local (ej. 'bob')
+                        'product_data': {
+                            'name': item.product.name,
+                        },
+                        'unit_amount': int(item.product.price * 100), # Stripe necesita el precio en centavos
+                    },
+                    'quantity': item.quantity,
+                })
+
+            # 3. Define las URLs de éxito y cancelación
+            # (Estas son las páginas a las que Stripe redirigirá al usuario después del pago)
+            success_url = request.build_absolute_uri('/') + '?status=success' # Placeholder
+            cancel_url = request.build_absolute_uri('/') + '?status=cancel' # Placeholder
+
+            # 4. Crea la sesión de checkout en Stripe
+            checkout_session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                line_items=line_items,
+                mode='payment',
+                success_url=success_url,
+                cancel_url=cancel_url,
+                # Guarda el ID de nuestra orden en los metadatos de Stripe
+                # ¡Esto es crucial para saber qué orden se pagó!
+                metadata={
+                    'order_id': cart.id
+                }
+            )
+
+            # 5. Devuelve la URL de la sesión de pago al frontend
+            return response.Response({'checkout_url': checkout_session.url})
+
+        except Order.DoesNotExist:
+            return response.Response({'error': 'You do not have an active cart.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class StripeWebhookView(views.APIView):
+    """
+    Escucha los eventos de Stripe, específicamente cuando un pago es exitoso.
+    """
+    permission_classes = [permissions.AllowAny] # Debe ser accesible públicamente para Stripe
+
+    def post(self, request):
+        payload = request.body
+        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+        event = None
+
+        try:
+            # 1. Verifica que el evento realmente venga de Stripe
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except ValueError as e:
+            # Payload inválido
+            return response.Response(status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.SignatureVerificationError as e:
+            # Firma inválida
+            return response.Response(status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Maneja el evento específico de "pago completado"
+        if event['type'] == 'checkout.session.completed':
+            session = event['data']['object']
+
+            # Obtiene el ID de nuestra orden que guardamos en los metadatos
+            order_id = session.get('metadata', {}).get('order_id')
+
+            if order_id is None:
+                return response.Response({'error': 'Missing order_id in Stripe metadata'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                # 3. Encuentra la orden y actualiza su estado
+                order = Order.objects.get(id=order_id, status='PENDING')
+                order.status = 'COMPLETED'
+                order.save()
+
+                # 4. Reduce el stock de los productos vendidos
+                for item in order.items.all():
+                    product = item.product
+                    if product.stock >= item.quantity:
+                        product.stock -= item.quantity
+                        product.save()
+                    else:
+                        # Manejar el caso de que no haya suficiente stock (raro, pero posible)
+                        print(f"Alerta: Stock insuficiente para el producto {product.id} en la orden {order.id}")
+                        # Aquí podrías enviar un email de alerta al administrador
+
+            except Order.DoesNotExist:
+                return response.Response({'error': f'Order with ID {order_id} not found or already processed.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Si es otro tipo de evento, simplemente lo ignoramos por ahora
+        else:
+            print(f"Evento no manejado: {event['type']}")
+
+        # 5. Responde a Stripe para confirmar que recibimos el evento
+        return response.Response(status=status.HTTP_200_OK)
+
+# --- VISTA DE PRUEBA PARA SIMULAR EL WEBHOOK MANUALMENTE ---
+class ManualOrderCompletionView(views.APIView):
+    """
+    [SOLO PARA DESARROLLO]
+    Endpoint para forzar la finalización de la orden pendiente de un usuario.
+    Simula el comportamiento del webhook de Stripe.
+    """
+    permission_classes = [permissions.IsAdminUser] # Protegido para que solo un admin pueda usarlo
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return response.Response({'error': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 1. Encuentra la orden PENDIENTE del cliente especificado
+            order = Order.objects.get(customer_id=user_id, status='PENDING')
+
+            # 2. Cambia el estado a COMPLETADO
+            order.status = 'COMPLETED'
+            order.save()
+
+            # 3. Reduce el stock de los productos
+            for item in order.items.all():
+                product = item.product
+                if product.stock >= item.quantity:
+                    product.stock -= item.quantity
+                    product.save()
+                else:
+                    print(f"Alerta de Stock (Debug): Stock insuficiente para el producto {product.id}")
+
+            return response.Response({'success': f'Order {order.id} for user {user_id} has been marked as COMPLETED.'}, status=status.HTTP_200_OK)
+
+        except Order.DoesNotExist:
+            return response.Response({'error': f'No pending order found for user {user_id}.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
