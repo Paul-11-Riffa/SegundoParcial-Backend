@@ -16,7 +16,7 @@ class ProductSerializer(serializers.ModelSerializer):
     """
     # Para mostrar el nombre de la categoría en lugar de solo su ID.
     category_name = serializers.CharField(source='category.name', read_only=True)
-
+    category_slug = serializers.SlugField(source='category.slug', read_only=True)
     class Meta:
         model = Product
         # Incluimos todos los campos del modelo y el campo extra 'category_name'.
@@ -24,6 +24,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'id',
             'category',
             'category_name',
+            'category_slug',
             'name',
             'description',
             'price',

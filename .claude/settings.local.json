@@ -13,7 +13,13 @@
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Read(//c/Users/paulr/PycharmProjects/SegundoParcial-Movil/**)",
+      "Bash(powershell -Command:*)",
+      "Bash(findstr:*)",
+      "WebSearch",
+      "Bash(flutter pub get)",
+      "Bash(flutter clean:*)"
     ],
     "deny": [],
     "ask": []
