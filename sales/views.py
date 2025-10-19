@@ -11,13 +11,9 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.units import inch
 from .filters import OrderFilter
-<<<<<<< Updated upstream
-from datetime import datetime
-=======
 from datetime import datetime, timedelta
 from django.utils import timezone
 import re
->>>>>>> Stashed changes
 class CartView(views.APIView):
     """
     Vista para gestionar el carrito de compras del usuario.
@@ -28,19 +24,10 @@ class CartView(views.APIView):
         """
         Obtiene o crea el carrito de compras actual (en estado 'PENDING') del usuario.
         """
-        # Busca una orden 'PENDING' para el usuario, o la crea si no existe.
-<<<<<<< Updated upstream
-        cart, created = Order.objects.get_or_create(
-            customer=request.user, 
-            status='PENDING',
-            defaults={'total_price': 0}
-        )
-=======
         # Asegurémonos de obtener solo carritos sin items completados
         cart = Order.objects.filter(customer=request.user, status='PENDING').first()
         if not cart:
             cart = Order.objects.create(customer=request.user, status='PENDING', total_price=0.00)
->>>>>>> Stashed changes
         serializer = OrderSerializer(cart)
         return response.Response(serializer.data)
 
@@ -272,8 +259,17 @@ class CompleteOrderView(views.APIView):
 
     def post(self, request):
         try:
-            # 1. Encuentra la orden PENDIENTE del usuario autenticado
-            cart = Order.objects.get(customer=request.user, status='PENDING')
+            # 1. Buscar orden en PROCESSING (después del checkout en Stripe)
+            cart = Order.objects.filter(customer=request.user, status='PROCESSING').first()
+            
+            if not cart:
+                # Si no hay orden en PROCESSING, buscar en PENDING (por compatibilidad)
+                cart = Order.objects.filter(customer=request.user, status='PENDING').first()
+            
+            if not cart:
+                return response.Response({
+                    'error': 'No order found to complete'
+                }, status=status.HTTP_404_NOT_FOUND)
 
             # 2. Cambia el estado a COMPLETADO
             cart.status = 'COMPLETED'
@@ -297,10 +293,6 @@ class CompleteOrderView(views.APIView):
                 'order_id': cart.id
             }, status=status.HTTP_200_OK)
 
-        except Order.DoesNotExist:
-            return response.Response({
-                'error': 'No pending order found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return response.Response({
                 'error': str(e)
@@ -492,235 +484,25 @@ class MyOrderListView(generics.ListAPIView):
         # Ordenamos por fecha, las más recientes primero
         return queryset.order_by('-created_at')
 
-<<<<<<< Updated upstream
-# ============================================================================
-# NUEVAS VISTAS PARA REPORTES DINÁMICOS
-# ============================================================================
-
-from django.http import HttpResponse
-from .prompt_parser import parse_prompt
-from .report_generator import generate_report
-from .excel_exporter import export_to_excel
-
-class DynamicReportView(views.APIView):
-    """
-    Endpoint para generar reportes dinámicos basados en prompts de texto.
-    
-    Acepta POST con:
-    {
-        "prompt": "Reporte de ventas del mes de octubre en PDF"
-    }
-    
-    Retorna el reporte en el formato solicitado (JSON, PDF o Excel).
-=======
 
 # --- VISTA PARA GENERAR REPORTES DINÁMICOS ---
 class GenerateDynamicReportView(views.APIView):
     """
     Vista para generar reportes dinámicos basados en comandos de texto o voz.
     Interpreta el prompt del usuario y genera el reporte solicitado en PDF, Excel o pantalla.
->>>>>>> Stashed changes
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
-<<<<<<< Updated upstream
-        """
-        Procesa el prompt y genera el reporte solicitado.
-        """
-        prompt = request.data.get('prompt', '')
-        
-        if not prompt:
-            return response.Response(
-                {'error': 'Se requiere un prompt para generar el reporte.'},
-=======
         prompt = request.data.get('prompt', '').lower()
         
         if not prompt:
             return response.Response(
                 {'detail': 'Se requiere un prompt para generar el reporte'},
->>>>>>> Stashed changes
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-<<<<<<< Updated upstream
-            # 1. Parsear el prompt
-            params = parse_prompt(prompt)
-            
-            # 2. Generar el reporte
-            report_data = generate_report(params)
-            
-            # 3. Retornar según el formato solicitado
-            format_type = params.get('format', 'screen')
-            
-            if format_type == 'pdf':
-                return self._generate_pdf_response(report_data)
-            elif format_type == 'excel':
-                return self._generate_excel_response(report_data)
-            else:
-                # Retornar JSON para mostrar en pantalla
-                return response.Response({
-                    'success': True,
-                    'prompt': prompt,
-                    'params': params,
-                    'data': report_data
-                })
-        
-        except Exception as e:
-            return response.Response(
-                {
-                    'error': 'Error al generar el reporte.',
-                    'detail': str(e)
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    def _generate_pdf_response(self, report_data):
-        """
-        Genera y retorna un PDF del reporte.
-        """
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.lib import colors
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
-        
-        # Crear respuesta HTTP de tipo PDF
-        response_pdf = HttpResponse(content_type='application/pdf')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'reporte_{timestamp}.pdf'
-        response_pdf['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        # Crear el documento PDF
-        doc = SimpleDocTemplate(response_pdf, pagesize=letter)
-        elements = []
-        styles = getSampleStyleSheet()
-        
-        # Estilo para el título
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            textColor=colors.HexColor('#1A222E'),
-            spaceAfter=12,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold'
-        )
-        
-        # Estilo para el subtítulo
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.HexColor('#666666'),
-            spaceAfter=20,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Oblique'
-        )
-        
-        # Añadir título
-        title = Paragraph(report_data.get('title', 'Reporte'), title_style)
-        elements.append(title)
-        
-        # Añadir subtítulo
-        if report_data.get('subtitle'):
-            subtitle = Paragraph(report_data.get('subtitle', ''), subtitle_style)
-            elements.append(subtitle)
-        
-        elements.append(Spacer(1, 0.2*inch))
-        
-        # Crear tabla de datos
-        table_data = [report_data.get('headers', [])]
-        table_data.extend(report_data.get('rows', []))
-        
-        if table_data:
-            # Calcular anchos de columna
-            num_columns = len(table_data[0])
-            col_widths = [letter[0] / num_columns * 0.9] * num_columns
-            
-            table = Table(table_data, colWidths=col_widths)
-            table.setStyle(TableStyle([
-                # Estilo del header
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A222E')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('TOPPADDING', (0, 0), (-1, 0), 12),
-                
-                # Estilo de las filas de datos
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-                ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 9),
-                ('TOPPADDING', (0, 1), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-                
-                # Bordes
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                
-                # Alternar colores en las filas
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.beige]),
-            ]))
-            
-            elements.append(table)
-        
-        # Añadir totales si existen
-        if report_data.get('totals'):
-            elements.append(Spacer(1, 0.3*inch))
-            
-            totals_data = []
-            for key, value in report_data['totals'].items():
-                label = key.replace('_', ' ').title()
-                totals_data.append([f"{label}:", str(value)])
-            
-            totals_table = Table(totals_data, colWidths=[3*inch, 2*inch])
-            totals_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#E2E8F0')),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 11),
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ]))
-            
-            elements.append(totals_table)
-        
-        # Añadir timestamp
-        elements.append(Spacer(1, 0.3*inch))
-        timestamp_text = f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        timestamp_para = Paragraph(timestamp_text, styles['Normal'])
-        elements.append(timestamp_para)
-        
-        # Construir el PDF
-        doc.build(elements)
-        
-        return response_pdf
-    
-    def _generate_excel_response(self, report_data):
-        """
-        Genera y retorna un Excel del reporte.
-        """
-        excel_file = export_to_excel(report_data)
-        
-        response_excel = HttpResponse(
-            excel_file.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'reporte_{timestamp}.xlsx'
-        response_excel['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        return response_excel
-=======
             # Parsear el prompt para extraer información
             parsed_data = self._parse_prompt(prompt)
             
@@ -1009,4 +791,3 @@ class GenerateDynamicReportView(views.APIView):
             data['orders'].append(order_data)
         
         return response.Response(data, status=status.HTTP_200_OK)
->>>>>>> Stashed changes
