@@ -11,7 +11,13 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.units import inch
 from .filters import OrderFilter
+<<<<<<< Updated upstream
 from datetime import datetime
+=======
+from datetime import datetime, timedelta
+from django.utils import timezone
+import re
+>>>>>>> Stashed changes
 class CartView(views.APIView):
     """
     Vista para gestionar el carrito de compras del usuario.
@@ -23,11 +29,18 @@ class CartView(views.APIView):
         Obtiene o crea el carrito de compras actual (en estado 'PENDING') del usuario.
         """
         # Busca una orden 'PENDING' para el usuario, o la crea si no existe.
+<<<<<<< Updated upstream
         cart, created = Order.objects.get_or_create(
             customer=request.user, 
             status='PENDING',
             defaults={'total_price': 0}
         )
+=======
+        # Asegurémonos de obtener solo carritos sin items completados
+        cart = Order.objects.filter(customer=request.user, status='PENDING').first()
+        if not cart:
+            cart = Order.objects.create(customer=request.user, status='PENDING', total_price=0.00)
+>>>>>>> Stashed changes
         serializer = OrderSerializer(cart)
         return response.Response(serializer.data)
 
@@ -249,6 +262,50 @@ class StripeWebhookView(views.APIView):
         # 5. Responde a Stripe para confirmar que recibimos el evento
         return response.Response(status=status.HTTP_200_OK)
 
+# --- VISTA PARA COMPLETAR LA ORDEN DEL USUARIO AUTENTICADO ---
+class CompleteOrderView(views.APIView):
+    """
+    Endpoint para completar la orden pendiente del usuario autenticado.
+    Se llama desde el frontend después de un pago exitoso en Stripe.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # 1. Encuentra la orden PENDIENTE del usuario autenticado
+            cart = Order.objects.get(customer=request.user, status='PENDING')
+
+            # 2. Cambia el estado a COMPLETADO
+            cart.status = 'COMPLETED'
+            cart.save()
+
+            # 3. Reduce el stock de los productos
+            for item in cart.items.all():
+                product = item.product
+                if product.stock >= item.quantity:
+                    product.stock -= item.quantity
+                    product.save()
+                else:
+                    print(f"Alerta de Stock: Stock insuficiente para el producto {product.id}")
+
+            # 4. ✅ CREAR NUEVO CARRITO VACÍO PARA EL USUARIO
+            Order.objects.create(customer=request.user, status='PENDING', total_price=0.00)
+
+            return response.Response({
+                'success': True,
+                'message': 'Order completed successfully',
+                'order_id': cart.id
+            }, status=status.HTTP_200_OK)
+
+        except Order.DoesNotExist:
+            return response.Response({
+                'error': 'No pending order found for this user'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return response.Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # --- VISTA DE PRUEBA PARA SIMULAR EL WEBHOOK MANUALMENTE ---
 class ManualOrderCompletionView(views.APIView):
     """
@@ -429,14 +486,13 @@ class MyOrderListView(generics.ListAPIView):
         excluyendo carritos pendientes Y vacíos.
         """
         user = self.request.user
-        # Obtenemos todas las órdenes del usuario
-        queryset = Order.objects.filter(customer=user)
-        # --- CAMBIO AQUÍ: Excluimos las que son PENDING y no tienen items ---
-        queryset = queryset.exclude(status='PENDING', items__isnull=True)
-        # -----------------------------------------------------------------
+        # Obtenemos todas las órdenes del usuario que NO sean PENDING
+        # (solo mostramos las COMPLETED y CANCELLED, no el carrito activo)
+        queryset = Order.objects.filter(customer=user).exclude(status='PENDING')
         # Ordenamos por fecha, las más recientes primero
         return queryset.order_by('-created_at')
 
+<<<<<<< Updated upstream
 # ============================================================================
 # NUEVAS VISTAS PARA REPORTES DINÁMICOS
 # ============================================================================
@@ -456,10 +512,19 @@ class DynamicReportView(views.APIView):
     }
     
     Retorna el reporte en el formato solicitado (JSON, PDF o Excel).
+=======
+
+# --- VISTA PARA GENERAR REPORTES DINÁMICOS ---
+class GenerateDynamicReportView(views.APIView):
+    """
+    Vista para generar reportes dinámicos basados en comandos de texto o voz.
+    Interpreta el prompt del usuario y genera el reporte solicitado en PDF, Excel o pantalla.
+>>>>>>> Stashed changes
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
+<<<<<<< Updated upstream
         """
         Procesa el prompt y genera el reporte solicitado.
         """
@@ -468,10 +533,18 @@ class DynamicReportView(views.APIView):
         if not prompt:
             return response.Response(
                 {'error': 'Se requiere un prompt para generar el reporte.'},
+=======
+        prompt = request.data.get('prompt', '').lower()
+        
+        if not prompt:
+            return response.Response(
+                {'detail': 'Se requiere un prompt para generar el reporte'},
+>>>>>>> Stashed changes
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
+<<<<<<< Updated upstream
             # 1. Parsear el prompt
             params = parse_prompt(prompt)
             
@@ -647,3 +720,293 @@ class DynamicReportView(views.APIView):
         response_excel['Content-Disposition'] = f'attachment; filename="{filename}"'
         
         return response_excel
+=======
+            # Parsear el prompt para extraer información
+            parsed_data = self._parse_prompt(prompt)
+            
+            # Obtener las órdenes filtradas
+            orders = self._get_filtered_orders(parsed_data)
+            
+            # Determinar el formato de salida
+            output_format = parsed_data.get('format', 'screen')
+            
+            if output_format == 'pdf':
+                return self._generate_pdf_report(orders, parsed_data)
+            elif output_format == 'excel':
+                return self._generate_excel_report(orders, parsed_data)
+            else:
+                return self._generate_screen_report(orders, parsed_data)
+                
+        except Exception as e:
+            print(f"⚠️ {str(e)}")
+            return response.Response(
+                {'detail': f'Error al generar el reporte: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _parse_prompt(self, prompt):
+        """
+        Parsea el prompt para extraer fechas, formato y otros parámetros.
+        """
+        parsed = {
+            'format': 'screen',
+            'start_date': None,
+            'end_date': None,
+            'group_by': None
+        }
+        
+        # Detectar formato
+        if 'pdf' in prompt:
+            parsed['format'] = 'pdf'
+        elif 'excel' in prompt:
+            parsed['format'] = 'excel'
+        elif 'pantalla' in prompt or 'screen' in prompt:
+            parsed['format'] = 'screen'
+        
+        # Detectar agrupación
+        if 'producto' in prompt or 'product' in prompt:
+            parsed['group_by'] = 'product'
+        elif 'cliente' in prompt or 'customer' in prompt:
+            parsed['group_by'] = 'customer'
+        elif 'categoría' in prompt or 'category' in prompt:
+            parsed['group_by'] = 'category'
+        
+        # Detectar fechas - Formato DD/MM/YYYY
+        date_pattern = r'(\d{1,2})/(\d{1,2})/(\d{4})'
+        dates = re.findall(date_pattern, prompt)
+        
+        if len(dates) >= 2:
+            # Hay fecha inicio y fin
+            try:
+                start = datetime(int(dates[0][2]), int(dates[0][1]), int(dates[0][0]))
+                end = datetime(int(dates[1][2]), int(dates[1][1]), int(dates[1][0]), 23, 59, 59)
+                parsed['start_date'] = timezone.make_aware(start)
+                parsed['end_date'] = timezone.make_aware(end)
+            except:
+                pass
+        elif len(dates) == 1:
+            # Solo una fecha
+            try:
+                date = datetime(int(dates[0][2]), int(dates[0][1]), int(dates[0][0]))
+                parsed['start_date'] = timezone.make_aware(date.replace(hour=0, minute=0, second=0))
+                parsed['end_date'] = timezone.make_aware(date.replace(hour=23, minute=59, second=59))
+            except:
+                pass
+        
+        # Detectar meses
+        months = {
+            'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+            'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+            'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+        }
+        
+        for month_name, month_num in months.items():
+            if month_name in prompt:
+                # Detectar año
+                year_match = re.search(r'\b(202\d)\b', prompt)
+                year = int(year_match.group(1)) if year_match else timezone.now().year
+                
+                # Primer día del mes
+                start = datetime(year, month_num, 1)
+                # Último día del mes
+                if month_num == 12:
+                    end = datetime(year, 12, 31, 23, 59, 59)
+                else:
+                    end = datetime(year, month_num + 1, 1) - timedelta(seconds=1)
+                
+                parsed['start_date'] = timezone.make_aware(start)
+                parsed['end_date'] = timezone.make_aware(end)
+                break
+        
+        # Detectar "año"
+        if 'año' in prompt or 'year' in prompt:
+            year_match = re.search(r'\b(202\d)\b', prompt)
+            if year_match:
+                year = int(year_match.group(1))
+                parsed['start_date'] = timezone.make_aware(datetime(year, 1, 1))
+                parsed['end_date'] = timezone.make_aware(datetime(year, 12, 31, 23, 59, 59))
+        
+        return parsed
+    
+    def _get_filtered_orders(self, parsed_data):
+        """
+        Obtiene las órdenes filtradas según los parámetros parseados.
+        """
+        orders = Order.objects.filter(status='COMPLETED')
+        
+        if parsed_data['start_date']:
+            orders = orders.filter(updated_at__gte=parsed_data['start_date'])
+        
+        if parsed_data['end_date']:
+            orders = orders.filter(updated_at__lte=parsed_data['end_date'])
+        
+        return orders.order_by('-updated_at')
+    
+    def _generate_pdf_report(self, orders, parsed_data):
+        """
+        Genera un reporte en formato PDF.
+        """
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib import colors
+        from reportlab.platypus import Table, TableStyle
+        from reportlab.lib.units import inch
+        
+        response_pdf = HttpResponse(content_type='application/pdf')
+        response_pdf['Content-Disposition'] = 'attachment; filename="reporte_ventas.pdf"'
+        
+        p = canvas.Canvas(response_pdf, pagesize=letter)
+        width, height = letter
+        
+        # Título
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(72, height - 50, "Reporte de Ventas")
+        
+        # Fechas
+        p.setFont("Helvetica", 12)
+        y_position = height - 80
+        
+        if parsed_data['start_date'] and parsed_data['end_date']:
+            p.drawString(72, y_position, 
+                f"Período: {parsed_data['start_date'].strftime('%d/%m/%Y')} - {parsed_data['end_date'].strftime('%d/%m/%Y')}")
+            y_position -= 25
+        
+        # Estadísticas generales
+        total_ventas = sum(order.total_price for order in orders)
+        p.drawString(72, y_position, f"Total de órdenes: {orders.count()}")
+        y_position -= 20
+        p.drawString(72, y_position, f"Monto total: ${total_ventas:.2f}")
+        y_position -= 30
+        
+        # Tabla de órdenes
+        table_data = [['Orden #', 'Cliente', 'Fecha', 'Total']]
+        
+        for order in orders[:15]:  # Limitar a 15 para que quepa en una página
+            table_data.append([
+                str(order.id),
+                order.customer.username,
+                order.updated_at.strftime('%d/%m/%Y'),
+                f"${order.total_price:.2f}"
+            ])
+        
+        if table_data:
+            table = Table(table_data, colWidths=[1*inch, 2*inch, 1.5*inch, 1.5*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A222E')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ]))
+            
+            table_height = table.wrap(width, height)[1]
+            table.drawOn(p, 72, y_position - table_height - 20)
+        
+        p.showPage()
+        p.save()
+        
+        return response_pdf
+    
+    def _generate_excel_report(self, orders, parsed_data):
+        """
+        Genera un reporte en formato Excel.
+        """
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Reporte de Ventas"
+            
+            # Encabezados
+            headers = ['Orden #', 'Cliente', 'Email', 'Fecha', 'Total', 'Items']
+            ws.append(headers)
+            
+            # Estilo de encabezados
+            header_fill = PatternFill(start_color="1A222E", end_color="1A222E", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF")
+            
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+            
+            # Datos
+            for order in orders:
+                items_count = order.items.count()
+                ws.append([
+                    order.id,
+                    order.customer.username,
+                    order.customer.email,
+                    order.updated_at.strftime('%d/%m/%Y %H:%M'),
+                    float(order.total_price),
+                    items_count
+                ])
+            
+            # Ajustar ancho de columnas
+            ws.column_dimensions['A'].width = 10
+            ws.column_dimensions['B'].width = 20
+            ws.column_dimensions['C'].width = 30
+            ws.column_dimensions['D'].width = 18
+            ws.column_dimensions['E'].width = 12
+            ws.column_dimensions['F'].width = 10
+            
+            # Guardar en memoria
+            from io import BytesIO
+            buffer = BytesIO()
+            wb.save(buffer)
+            buffer.seek(0)
+            
+            response_excel = HttpResponse(
+                buffer.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response_excel['Content-Disposition'] = 'attachment; filename="reporte_ventas.xlsx"'
+            
+            return response_excel
+            
+        except ImportError:
+            return response.Response(
+                {'detail': 'El módulo openpyxl no está instalado. Por favor instálalo con: pip install openpyxl'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _generate_screen_report(self, orders, parsed_data):
+        """
+        Genera un reporte para mostrar en pantalla (JSON).
+        """
+        data = {
+            'total_orders': orders.count(),
+            'total_amount': sum(order.total_price for order in orders),
+            'period': {
+                'start': parsed_data['start_date'].strftime('%d/%m/%Y') if parsed_data['start_date'] else None,
+                'end': parsed_data['end_date'].strftime('%d/%m/%Y') if parsed_data['end_date'] else None,
+            },
+            'orders': []
+        }
+        
+        for order in orders[:50]:  # Limitar a 50 órdenes
+            order_data = {
+                'id': order.id,
+                'customer': order.customer.username,
+                'email': order.customer.email,
+                'date': order.updated_at.strftime('%d/%m/%Y %H:%M'),
+                'total': float(order.total_price),
+                'items': [
+                    {
+                        'product': item.product.name,
+                        'quantity': item.quantity,
+                        'price': float(item.price)
+                    }
+                    for item in order.items.all()
+                ]
+            }
+            data['orders'].append(order_data)
+        
+        return response.Response(data, status=status.HTTP_200_OK)
+>>>>>>> Stashed changes
