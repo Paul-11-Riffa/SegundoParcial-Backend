@@ -5,6 +5,7 @@ from products.models import Product
 class Order(models.Model):
     class OrderStatus(models.TextChoices):
         PENDING = 'PENDING', 'Pending'       # Actúa como el carrito de compras
+        PROCESSING = 'PROCESSING', 'Processing' # En proceso de pago
         COMPLETED = 'COMPLETED', 'Completed' # Es una venta finalizada
         CANCELLED = 'CANCELLED', 'Cancelled'
 
