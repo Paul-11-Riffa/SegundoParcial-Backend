@@ -382,6 +382,14 @@ class CompleteUserOrderView(views.APIView):
 class SalesHistoryView(generics.ListAPIView):
     """
     Endpoint para que los administradores vean todas las órdenes completadas.
+    Incluye filtros avanzados por fecha, cliente, monto y más.
+    
+    Ejemplos de uso:
+    - /api/sales/sales-history/ (todas las ventas completadas)
+    - /api/sales/sales-history/?start_date=2024-01-01&end_date=2024-12-31
+    - /api/sales/sales-history/?customer_username=johndoe
+    - /api/sales/sales-history/?total_min=50&total_max=500
+    - /api/sales/sales-history/?ordering=-total_price
     """
     permission_classes = [permissions.IsAdminUser]
     serializer_class = OrderSerializer
@@ -392,7 +400,7 @@ class SalesHistoryView(generics.ListAPIView):
         """
         Filtra las órdenes para devolver solo las que tienen el estado 'COMPLETED'.
         """
-        return Order.objects.filter(status='COMPLETED').order_by('-updated_at')
+        return Order.objects.filter(status='COMPLETED').select_related('customer').prefetch_related('items__product').order_by('-updated_at')
 
 # --- VISTA PARA GENERAR COMPROBANTES EN PDF ---
 class GenerateOrderReceiptPDF(views.APIView):
