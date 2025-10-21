@@ -140,7 +140,8 @@ class ReportGenerator:
         self.report_data['subtitle'] = self._get_date_range_text()
         self.report_data['headers'] = ['Cliente', 'Email', 'Cantidad de Compras', 'Monto Total', 'Ticket Promedio']
         
-        orders = self._get_base_orders_queryset()
+        # ✅ OPTIMIZADO: select_related para traer datos del cliente
+        orders = self._get_base_orders_queryset().select_related('customer')
         
         # Agrupar por cliente
         client_stats = orders.values(

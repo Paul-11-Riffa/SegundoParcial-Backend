@@ -14,6 +14,7 @@ from .filters import OrderFilter
 from datetime import datetime, timedelta
 from django.utils import timezone
 import re
+from api.permissions import IsAdminUser  # Importar permiso personalizado
 class CartView(views.APIView):
     """
     Vista para gestionar el carrito de compras del usuario.
@@ -24,8 +25,12 @@ class CartView(views.APIView):
         """
         Obtiene o crea el carrito de compras actual (en estado 'PENDING') del usuario.
         """
-        # Asegurémonos de obtener solo carritos sin items completados
-        cart = Order.objects.filter(customer=request.user, status='PENDING').first()
+        # ✅ OPTIMIZADO: prefetch_related para traer items y productos en una consulta
+        cart = Order.objects.filter(
+            customer=request.user, 
+            status='PENDING'
+        ).prefetch_related('items__product__category').first()
+        
         if not cart:
             cart = Order.objects.create(customer=request.user, status='PENDING', total_price=0.00)
         serializer = OrderSerializer(cart)
@@ -305,7 +310,7 @@ class ManualOrderCompletionView(views.APIView):
     Endpoint para forzar la finalización de la orden pendiente de un usuario.
     Simula el comportamiento del webhook de Stripe.
     """
-    permission_classes = [permissions.IsAdminUser] # Protegido para que solo un admin pueda usarlo
+    permission_classes = [IsAdminUser] # Protegido para que solo un admin pueda usarlo
 
     def post(self, request):
         user_id = request.data.get('user_id')
@@ -391,7 +396,7 @@ class SalesHistoryView(generics.ListAPIView):
     - /api/sales/sales-history/?total_min=50&total_max=500
     - /api/sales/sales-history/?ordering=-total_price
     """
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminUser]
     serializer_class = OrderSerializer
     filterset_class = OrderFilter
     filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
@@ -402,14 +407,33 @@ class SalesHistoryView(generics.ListAPIView):
         """
         return Order.objects.filter(status='COMPLETED').select_related('customer').prefetch_related('items__product').order_by('-updated_at')
 
+
+class SalesHistoryDetailView(generics.RetrieveAPIView):
+    """
+    Endpoint para ver el detalle de una orden completada específica.
+    Solo administradores pueden ver el detalle completo.
+    """
+    permission_classes = [IsAdminUser]
+    serializer_class = OrderSerializer
+    lookup_field = 'pk'
+
+    def get_queryset(self):
+        """
+        Filtra las órdenes para devolver solo las que tienen el estado 'COMPLETED'.
+        """
+        return Order.objects.filter(status='COMPLETED').select_related('customer').prefetch_related('items__product__category')
+
 # --- VISTA PARA GENERAR COMPROBANTES EN PDF ---
 class GenerateOrderReceiptPDF(views.APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminUser]
 
     def get(self, request, order_id):
         try:
             # 1. Buscamos la orden completada
-            order = Order.objects.get(id=order_id, status='COMPLETED')
+            # ✅ OPTIMIZADO: prefetch_related para traer items y productos
+            order = Order.objects.select_related('customer').prefetch_related(
+                'items__product__category'
+            ).get(id=order_id, status='COMPLETED')
         except Order.DoesNotExist:
             return response.Response({'error': 'Completed order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -499,7 +523,7 @@ class GenerateDynamicReportView(views.APIView):
     Vista para generar reportes dinámicos basados en comandos de texto o voz.
     Interpreta el prompt del usuario y genera el reporte solicitado en PDF, Excel o pantalla.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUser]  # ✅ Cambiado a IsAdminUser para seguridad
     
     def post(self, request):
         prompt = request.data.get('prompt', '').lower()

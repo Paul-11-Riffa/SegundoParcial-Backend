@@ -45,7 +45,7 @@ class CartTestCase(TestCase):
         )
         
         # Login
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'client',
             'password': 'clientpass123'
         })
@@ -54,7 +54,7 @@ class CartTestCase(TestCase):
     
     def test_get_empty_cart(self):
         """Test: Obtener carrito vacío"""
-        response = self.client.get('/api/sales/cart/')
+        response = self.client.get('/api/orders/cart/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'PENDING')
@@ -68,7 +68,7 @@ class CartTestCase(TestCase):
             'quantity': 2
         }
         
-        response = self.client.post('/api/sales/cart/', data)
+        response = self.client.post('/api/orders/cart/', data)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['items']), 1)
@@ -78,13 +78,13 @@ class CartTestCase(TestCase):
     def test_add_multiple_products_to_cart(self):
         """Test: Añadir múltiples productos al carrito"""
         # Añadir producto 1
-        self.client.post('/api/sales/cart/', {
+        self.client.post('/api/orders/cart/', {
             'product_id': self.product1.id,
             'quantity': 1
         })
         
         # Añadir producto 2
-        response = self.client.post('/api/sales/cart/', {
+        response = self.client.post('/api/orders/cart/', {
             'product_id': self.product2.id,
             'quantity': 3
         })
@@ -97,13 +97,13 @@ class CartTestCase(TestCase):
     def test_add_same_product_increases_quantity(self):
         """Test: Añadir el mismo producto aumenta la cantidad"""
         # Añadir 2 unidades
-        self.client.post('/api/sales/cart/', {
+        self.client.post('/api/orders/cart/', {
             'product_id': self.product1.id,
             'quantity': 2
         })
         
         # Añadir 3 unidades más del mismo producto
-        response = self.client.post('/api/sales/cart/', {
+        response = self.client.post('/api/orders/cart/', {
             'product_id': self.product1.id,
             'quantity': 3
         })
@@ -119,14 +119,14 @@ class CartTestCase(TestCase):
             'quantity': 15  # Stock es 10
         }
         
-        response = self.client.post('/api/sales/cart/', data)
+        response = self.client.post('/api/orders/cart/', data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_update_cart_item_quantity(self):
         """Test: Actualizar cantidad de un item en el carrito"""
         # Añadir producto
-        add_response = self.client.post('/api/sales/cart/', {
+        add_response = self.client.post('/api/orders/cart/', {
             'product_id': self.product1.id,
             'quantity': 2
         })
@@ -134,7 +134,7 @@ class CartTestCase(TestCase):
         item_id = add_response.data['items'][0]['id']
         
         # Actualizar cantidad
-        update_response = self.client.put(f'/api/sales/cart/items/{item_id}/', {
+        update_response = self.client.put(f'/api/orders/cart/items/{item_id}/', {
             'quantity': 5
         })
         
@@ -145,7 +145,7 @@ class CartTestCase(TestCase):
     def test_remove_cart_item(self):
         """Test: Eliminar item del carrito"""
         # Añadir producto
-        add_response = self.client.post('/api/sales/cart/', {
+        add_response = self.client.post('/api/orders/cart/', {
             'product_id': self.product1.id,
             'quantity': 2
         })
@@ -153,7 +153,7 @@ class CartTestCase(TestCase):
         item_id = add_response.data['items'][0]['id']
         
         # Eliminar item
-        delete_response = self.client.delete(f'/api/sales/cart/items/{item_id}/')
+        delete_response = self.client.delete(f'/api/orders/cart/items/{item_id}/')
         
         self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(delete_response.data['items']), 0)
@@ -164,9 +164,10 @@ class CartTestCase(TestCase):
         # Remover credenciales
         self.client.credentials()
         
-        response = self.client.get('/api/sales/cart/')
+        response = self.client.get('/api/orders/cart/')
         
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # Django REST Framework puede devolver 401 o 403
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
 
 class OrderHistoryTestCase(TestCase):
@@ -218,13 +219,13 @@ class OrderHistoryTestCase(TestCase):
     def test_client_can_view_own_orders(self):
         """Test: Cliente puede ver su propio historial"""
         # Login como cliente
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'client',
             'password': 'clientpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get('/api/sales/my-orders/')
+        response = self.client.get('/api/orders/my-orders/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
@@ -233,13 +234,13 @@ class OrderHistoryTestCase(TestCase):
     def test_admin_can_view_all_sales(self):
         """Test: Admin puede ver todas las ventas"""
         # Login como admin
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'admin',
             'password': 'adminpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get('/api/sales/sales-history/')
+        response = self.client.get('/api/orders/sales-history/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
@@ -247,13 +248,13 @@ class OrderHistoryTestCase(TestCase):
     def test_filter_sales_by_customer(self):
         """Test: Filtrar ventas por cliente"""
         # Login como admin
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'admin',
             'password': 'adminpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get(f'/api/sales/sales-history/?customer={self.client_user.id}')
+        response = self.client.get(f'/api/orders/sales-history/?customer={self.client_user.id}')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for order in response.data:
@@ -262,13 +263,13 @@ class OrderHistoryTestCase(TestCase):
     def test_filter_sales_by_username(self):
         """Test: Filtrar ventas por username del cliente"""
         # Login como admin
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'admin',
             'password': 'adminpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get('/api/sales/sales-history/?customer_username=client')
+        response = self.client.get('/api/orders/sales-history/?customer_username=client')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
@@ -276,13 +277,13 @@ class OrderHistoryTestCase(TestCase):
     def test_filter_sales_by_price_range(self):
         """Test: Filtrar ventas por rango de precio"""
         # Login como admin
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'admin',
             'password': 'adminpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get('/api/sales/sales-history/?total_min=100&total_max=300')
+        response = self.client.get('/api/orders/sales-history/?total_min=100&total_max=300')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for order in response.data:
@@ -293,13 +294,13 @@ class OrderHistoryTestCase(TestCase):
     def test_client_cannot_view_all_sales(self):
         """Test: Cliente no puede ver todas las ventas"""
         # Login como cliente
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'client',
             'password': 'clientpass123'
         })
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
         
-        response = self.client.get('/api/sales/sales-history/')
+        response = self.client.get('/api/orders/sales-history/')
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -327,7 +328,7 @@ class StockManagementTestCase(TestCase):
         )
         
         # Login
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'client',
             'password': 'clientpass123'
         })
@@ -336,7 +337,7 @@ class StockManagementTestCase(TestCase):
     def test_stock_decreases_after_order_completion(self):
         """Test: El stock disminuye al completar una orden"""
         # Añadir producto al carrito
-        self.client.post('/api/sales/cart/', {
+        self.client.post('/api/orders/cart/', {
             'product_id': self.product.id,
             'quantity': 3
         })

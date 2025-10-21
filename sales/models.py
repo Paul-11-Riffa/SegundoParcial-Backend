@@ -2,6 +2,9 @@ from django.db import models
 from django.contrib.auth.models import User
 from products.models import Product
 
+# Importar modelos de auditoría
+from .models_audit import AuditLog, UserSession
+
 class Order(models.Model):
     class OrderStatus(models.TextChoices):
         PENDING = 'PENDING', 'Pending'       # Actúa como el carrito de compras
