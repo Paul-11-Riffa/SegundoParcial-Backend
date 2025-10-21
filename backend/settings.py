@@ -26,7 +26,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-k_hm7dl%s+fisxqs8xnp+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,testserver').split(',')
 
 # Application definition
 
@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'api',
     'products',
     'sales',
+    'notifications',
+    'voice_commands',
 ]
 
 MIDDLEWARE = [
@@ -55,6 +57,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Middleware de Auditoría y Bitácora (debe ir después de AuthenticationMiddleware)
+    # TEMPORALMENTE DESHABILITADO PARA DEBUGGING
+    # 'sales.middleware_audit.SessionTrackingMiddleware',
+    # 'sales.middleware_audit.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -80,11 +86,42 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.config(
-        # Lee las variables de tu archivo .env
-        default=f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT'),
+    }
 }
+
+# Cache configuration for ML predictions
+# Usar LocMemCache por defecto (no requiere Redis)
+# Para producción con Redis, descomentar la configuración Redis y comentar LocMemCache
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'ml-predictions',
+        'TIMEOUT': 900,  # 15 minutos
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        }
+    }
+}
+
+# Configuración alternativa con Redis (requiere: pip install django-redis)
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': config('REDIS_URL', default='redis://127.0.0.1:6379/1'),
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#         },
+#         'KEY_PREFIX': 'ml_predictions',
+#         'TIMEOUT': 900,  # 15 minutos
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -150,8 +187,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
-    'UNAUTHENTICATED_USER': None,
-    'UNAUTHENTICATED_TOKEN': None,
+    # Removido UNAUTHENTICATED_USER y UNAUTHENTICATED_TOKEN para usar los valores por defecto
+    # que manejan mejor los usuarios anónimos
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
@@ -174,3 +211,19 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 STRIPE_PUBLIC_KEY = config('STRIPE_PUBLIC_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET')
+
+# --- CONFIGURACIÓN DE FIREBASE CLOUD MESSAGING ---
+# Ruta al archivo de credenciales de Firebase
+# Descarga el archivo desde Firebase Console > Project Settings > Service Accounts
+FIREBASE_CREDENTIALS_PATH = config(
+    'FIREBASE_CREDENTIALS_PATH',
+    default=str(BASE_DIR / 'firebase-credentials.json')
+)
+
+# --- CONFIGURACIÓN DE GOOGLE CLOUD SPEECH-TO-TEXT ---
+# Ruta al archivo de credenciales de Google Cloud
+# Descarga el archivo desde Google Cloud Console > IAM & Admin > Service Accounts
+GOOGLE_CLOUD_CREDENTIALS_PATH = config(
+    'GOOGLE_CLOUD_CREDENTIALS_PATH',
+    default=str(BASE_DIR / 'google-cloud-credentials.json')
+)

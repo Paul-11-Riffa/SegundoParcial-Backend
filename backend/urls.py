@@ -24,6 +24,9 @@ urlpatterns = [
     path('api/', include('api.urls')),
     path('api/shop/', include('products.urls')),
     path('api/orders/', include('sales.urls')),
+    path('api/sales/', include('sales.urls')),  # Alias para endpoints de ventas/predicciones
+    path('api/notifications/', include('notifications.urls')),
+    path('api/', include('voice_commands.urls')),
 ]
 
 # Servir archivos media en desarrollo
