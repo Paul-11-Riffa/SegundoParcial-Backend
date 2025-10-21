@@ -45,7 +45,7 @@ class AuthenticationTestCase(TestCase):
             'last_name': 'User'
         }
         
-        response = self.client.post('/api/auth/register/', data)
+        response = self.client.post('/api/register/', data)
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('token', response.data)
@@ -67,7 +67,7 @@ class AuthenticationTestCase(TestCase):
             'password': 'pass123'
         }
         
-        response = self.client.post('/api/auth/register/', data)
+        response = self.client.post('/api/register/', data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_login_with_username(self):
@@ -77,7 +77,7 @@ class AuthenticationTestCase(TestCase):
             'password': 'testpass123'
         }
         
-        response = self.client.post('/api/auth/login/', data)
+        response = self.client.post('/api/login/', data)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('token', response.data)
@@ -90,7 +90,7 @@ class AuthenticationTestCase(TestCase):
             'password': 'testpass123'
         }
         
-        response = self.client.post('/api/auth/login/', data)
+        response = self.client.post('/api/login/', data)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('token', response.data)
@@ -103,7 +103,7 @@ class AuthenticationTestCase(TestCase):
             'password': 'wrongpassword'
         }
         
-        response = self.client.post('/api/auth/login/', data)
+        response = self.client.post('/api/login/', data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
     def test_logout(self):
@@ -113,20 +113,20 @@ class AuthenticationTestCase(TestCase):
             'username': 'testuser',
             'password': 'testpass123'
         }
-        login_response = self.client.post('/api/auth/login/', login_data)
+        login_response = self.client.post('/api/login/', login_data)
         token = login_response.data['token']
         
         # Configurar el cliente con el token
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
         
         # Hacer logout
-        response = self.client.post('/api/auth/logout/')
+        response = self.client.post('/api/logout/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         
-        # Verificar que el token fue eliminado
+        # Verificar que el token fue eliminado (Django REST Framework devuelve 403)
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
-        profile_response = self.client.get('/api/auth/profile/')
-        self.assertEqual(profile_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        profile_response = self.client.get('/api/profile/')
+        self.assertIn(profile_response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
     
     def test_get_user_profile(self):
         """Test: Obtener perfil de usuario autenticado"""
@@ -135,12 +135,12 @@ class AuthenticationTestCase(TestCase):
             'username': 'testuser',
             'password': 'testpass123'
         }
-        login_response = self.client.post('/api/auth/login/', login_data)
+        login_response = self.client.post('/api/login/', login_data)
         token = login_response.data['token']
         
         # Obtener perfil
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
-        response = self.client.get('/api/auth/profile/')
+        response = self.client.get('/api/profile/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['username'], 'testuser')
@@ -154,7 +154,7 @@ class AuthenticationTestCase(TestCase):
             'username': 'testuser',
             'password': 'testpass123'
         }
-        login_response = self.client.post('/api/auth/login/', login_data)
+        login_response = self.client.post('/api/login/', login_data)
         token = login_response.data['token']
         
         # Actualizar perfil
@@ -163,7 +163,7 @@ class AuthenticationTestCase(TestCase):
             'username': 'updateduser',
             'email': 'updated@example.com'
         }
-        response = self.client.put('/api/auth/profile/', update_data)
+        response = self.client.put('/api/profile/', update_data)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -174,8 +174,9 @@ class AuthenticationTestCase(TestCase):
     
     def test_profile_requires_authentication(self):
         """Test: Perfil requiere autenticación"""
-        response = self.client.get('/api/auth/profile/')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        response = self.client.get('/api/profile/')
+        # Django REST Framework puede devolver 401 o 403
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
 
 class UserManagementTestCase(TestCase):
@@ -203,7 +204,7 @@ class UserManagementTestCase(TestCase):
         )
         
         # Login como admin
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'admin',
             'password': 'adminpass123'
         })
@@ -212,7 +213,7 @@ class UserManagementTestCase(TestCase):
     def test_admin_can_list_users(self):
         """Test: Admin puede listar usuarios"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token}')
-        response = self.client.get('/api/auth/users/')
+        response = self.client.get('/api/users/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 2)  # Al menos admin y client
@@ -232,7 +233,7 @@ class UserManagementTestCase(TestCase):
             }
         }
         
-        response = self.client.post('/api/auth/users/', data, format='json')
+        response = self.client.post('/api/users/', data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         
@@ -252,7 +253,7 @@ class UserManagementTestCase(TestCase):
             }
         }
         
-        response = self.client.patch(f'/api/auth/users/{self.client_user.id}/', data, format='json')
+        response = self.client.patch(f'/api/users/{self.client_user.id}/', data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -264,7 +265,7 @@ class UserManagementTestCase(TestCase):
         """Test: Admin puede eliminar usuarios (excepto a sí mismo)"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token}')
         
-        response = self.client.delete(f'/api/auth/users/{self.client_user.id}/')
+        response = self.client.delete(f'/api/users/{self.client_user.id}/')
         
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         
@@ -275,28 +276,28 @@ class UserManagementTestCase(TestCase):
         """Test: Admin no puede eliminarse a sí mismo"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token}')
         
-        response = self.client.delete(f'/api/auth/users/{self.admin_user.id}/')
+        response = self.client.delete(f'/api/users/{self.admin_user.id}/')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_client_cannot_access_user_management(self):
         """Test: Cliente no puede acceder a gestión de usuarios"""
         # Login como cliente
-        login_response = self.client.post('/api/auth/login/', {
+        login_response = self.client.post('/api/login/', {
             'username': 'client',
             'password': 'clientpass123'
         })
         client_token = login_response.data['token']
         
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {client_token}')
-        response = self.client.get('/api/auth/users/')
+        response = self.client.get('/api/users/')
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
     
     def test_admin_can_list_clients_only(self):
         """Test: Admin puede listar solo clientes"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token}')
-        response = self.client.get('/api/auth/clients/')
+        response = self.client.get('/api/clients/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         

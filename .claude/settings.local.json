@@ -19,7 +19,8 @@
       "Bash(findstr:*)",
       "WebSearch",
       "Bash(flutter pub get)",
-      "Bash(flutter clean:*)"
+      "Bash(flutter clean:*)",
+      "Bash(mkdir -p \"C:\\Users\\paulr\\PycharmProjects\\SegundoParcial-Backend\\sales\\management\\commands\")"
     ],
     "deny": [],
     "ask": []
