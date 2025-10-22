@@ -1,8 +1,8 @@
 from django.urls import path
 from .views import (
     CartView, CartItemView, StripeCheckoutView, StripeWebhookView, CompleteOrderView, 
-    ManualOrderCompletionView, SalesHistoryView, SalesHistoryDetailView, GenerateOrderReceiptPDF, MyOrderListView,
-    GenerateDynamicReportView
+    ManualOrderCompletionView, SalesHistoryView, SalesHistoryDetailView, GenerateOrderReceiptPDF, MyOrderListView
+    # ❌ ELIMINADO: GenerateDynamicReportView (duplicado - usar sistema unificado)
 )
 from .views_advanced_reports import (
     CustomerAnalysisReportView, ProductABCAnalysisView, ComparativeReportView,
@@ -59,7 +59,9 @@ urlpatterns = [
     path('reports/unified/test/', test_intelligent_parser, name='test-intelligent-parser'),
 
     # === REPORTES DINÁMICOS ===
-    path('reports/generate/', GenerateDynamicReportView.as_view(), name='generate-report'),
+    # ❌ ELIMINADO: path('reports/generate/', GenerateDynamicReportView.as_view(), name='generate-report')
+    # ✅ USAR: POST /api/sales/reports/unified/generate/ (Sistema Unificado Inteligente)
+    # El sistema unificado soporta comandos en lenguaje natural, voz, y todos los formatos (JSON, PDF, Excel)
 
     # === REPORTES AVANZADOS ===
     path('reports/customer-analysis/', CustomerAnalysisReportView.as_view(), name='customer-analysis'),

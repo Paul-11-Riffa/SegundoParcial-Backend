@@ -40,6 +40,7 @@ class AuditMiddleware(MiddlewareMixin):
         'login': ('AUTH', 'Inicio de sesión'),
         'logout': ('AUTH', 'Cierre de sesión'),
         'register': ('AUTH', 'Registro de usuario'),
+        
         'cart': ('CREATE', 'Operación en carrito de compras'),
         'checkout': ('PAYMENT', 'Proceso de pago'),
         'order': ('CREATE', 'Gestión de órdenes'),
