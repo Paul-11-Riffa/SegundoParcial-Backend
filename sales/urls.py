@@ -33,7 +33,8 @@ from .views_unified_reports import (
 )
 from .views_audit import (
     AuditLogListView, AuditLogDetailView, AuditStatisticsView, UserActivityView,
-    ActiveSessionsView, SessionHistoryView, clean_old_logs, security_alerts
+    ActiveSessionsView, SessionHistoryView, clean_old_logs, security_alerts,
+    check_current_session
 )
 from .views_audit_reports import (
     GenerateAuditReportView, GenerateSessionReportView
@@ -123,6 +124,7 @@ urlpatterns = [
     path('audit/sessions/history/', SessionHistoryView.as_view(), name='session-history'),
     path('audit/clean-old-logs/', clean_old_logs, name='clean-old-logs'),
     path('audit/security-alerts/', security_alerts, name='security-alerts'),
+    path('audit/check-session/', check_current_session, name='check-current-session'),  # Endpoint de prueba
 
     # === 📄 REPORTES DE AUDITORÍA CON EXPORTACIÓN (NUEVO) ===
     path('audit/generate-report/', GenerateAuditReportView.as_view(), name='generate-audit-report'),

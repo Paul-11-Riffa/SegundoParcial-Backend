@@ -213,7 +213,6 @@ class AuditMiddleware(MiddlewareMixin):
                 additional_data['url_params'] = resolved.kwargs
         except Exception:
             pass
-            pass
 
         # Si es una operación de ML, agregar detalles
         if 'ml' in request.path.lower() or 'predict' in request.path.lower():
@@ -255,34 +254,61 @@ class SessionTrackingMiddleware(MiddlewareMixin):
     """
     Middleware adicional para rastrear sesiones de usuarios.
     Crea registros de sesión en login y los cierra en logout.
+    Compatible con JWT y sesiones tradicionales de Django.
     """
 
     def process_request(self, request):
         """
         Verifica y crea sesiones de usuario.
         Solo procesa para usuarios autenticados.
+        Funciona tanto con JWT como con sesiones tradicionales.
         """
         # Verificar que el usuario esté correctamente autenticado
         if (hasattr(request, 'user') and 
             request.user is not None and 
             hasattr(request.user, 'is_authenticated') and 
             request.user.is_authenticated):
-            # Si hay sesión y no existe registro, crearlo
-            if hasattr(request, 'session') and request.session.session_key:
-                self._ensure_session_record(request)
+            
+            # Intentar obtener o crear session_key
+            session_key = None
+            
+            # Opción 1: Sesión tradicional de Django
+            if hasattr(request, 'session'):
+                # Asegurar que la sesión tenga una key
+                if not request.session.session_key:
+                    request.session.create()
+                session_key = request.session.session_key
+            
+            # Opción 2: Si no hay sesión pero hay JWT, generar identificador único
+            if not session_key:
+                # Para JWT, usar una combinación de user_id + IP como identificador
+                import hashlib
+                ip = self._get_client_ip(request)
+                user_agent = request.META.get('HTTP_USER_AGENT', '')[:50]
+                session_key = hashlib.md5(
+                    f"{request.user.id}_{ip}_{user_agent}".encode()
+                ).hexdigest()
+            
+            if session_key:
+                self._ensure_session_record(request, session_key)
 
         return None
 
-    def _ensure_session_record(self, request):
+    def _ensure_session_record(self, request, session_key):
         """
         Asegura que exista un registro de sesión para el usuario actual.
+        Compatible con JWT y sesiones tradicionales.
         """
         try:
-            session_key = request.session.session_key
             user = request.user
 
-            # Verificar si ya existe
-            if not UserSession.objects.filter(session_key=session_key, is_active=True).exists():
+            # Verificar si ya existe una sesión activa para este session_key
+            existing_session = UserSession.objects.filter(
+                session_key=session_key,
+                is_active=True
+            ).first()
+            
+            if not existing_session:
                 # Obtener IP
                 ip_address = self._get_client_ip(request)
 
@@ -296,8 +322,16 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                     ip_address=ip_address,
                     user_agent=user_agent
                 )
+                print(f"✅ Nueva sesión creada para {user.username} (key: {session_key[:20]}...)")
+            else:
+                # Actualizar última actividad de la sesión existente
+                existing_session.last_activity = timezone.now()
+                existing_session.save(update_fields=['last_activity'])
+                
         except Exception as e:
-            print(f"Error al crear sesión: {e}")
+            print(f"❌ Error al crear/actualizar sesión: {e}")
+            import traceback
+            traceback.print_exc()
 
     @staticmethod
     def _get_client_ip(request):

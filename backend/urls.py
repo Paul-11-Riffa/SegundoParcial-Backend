@@ -23,7 +23,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
     path('api/shop/', include('products.urls')),
+    path('api/products/', include('products.urls')),  # Alias adicional para ML recommendations
     path('api/sales/', include('sales.urls')),  # Carritos, órdenes, ventas, reportes, ML y predicciones
+    path('api/orders/', include('sales.urls')),  # Alias para compatibilidad con frontend
     path('api/notifications/', include('notifications.urls')),
     path('api/', include('voice_commands.urls')),
 ]
