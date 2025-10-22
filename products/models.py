@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+import os
 
 
 class Category(models.Model):
@@ -73,3 +74,35 @@ class Product(models.Model):
     def is_low_stock(self):
         """Verifica si el producto tiene stock bajo (menos de 10)"""
         return 0 < self.stock < 10
+    
+    @property
+    def image_url(self):
+        """
+        Devuelve la URL de la imagen si existe, None si no existe o está rota
+        """
+        if self.image:
+            # Verificar si el archivo existe físicamente
+            try:
+                if os.path.isfile(self.image.path):
+                    return self.image.url
+            except (ValueError, AttributeError):
+                pass
+        return None
+    
+    @property
+    def has_valid_image(self):
+        """Verifica si el producto tiene una imagen válida"""
+        return self.image_url is not None
+    
+    def delete_image(self):
+        """Elimina la imagen física del producto"""
+        if self.image:
+            try:
+                if os.path.isfile(self.image.path):
+                    os.remove(self.image.path)
+                self.image = None
+                self.save()
+                return True
+            except Exception:
+                pass
+        return False
