@@ -11,14 +11,14 @@ class VoiceCommandHistoryInline(admin.TabularInline):
 
 @admin.register(VoiceCommand)
 class VoiceCommandAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'command_type', 'status', 'confidence', 'created_at']
+    list_display = ['id', 'user', 'command_type', 'status', 'confidence_score', 'created_at']
     list_filter = ['status', 'command_type', 'created_at']
-    search_fields = ['user__username', 'transcribed_text', 'command_type']
+    search_fields = ['user__username', 'command_text', 'command_type']
     readonly_fields = [
-        'user', 'audio_file', 'transcribed_text', 'status', 
+        'user', 'command_text', 'status', 
         'command_type', 'interpreted_params', 'result_data', 
-        'error_message', 'duration_seconds', 'processing_time_ms', 
-        'confidence', 'created_at', 'updated_at'
+        'error_message', 'processing_time_ms', 
+        'confidence_score', 'created_at', 'updated_at'
     ]
     inlines = [VoiceCommandHistoryInline]
     
@@ -26,10 +26,10 @@ class VoiceCommandAdmin(admin.ModelAdmin):
         ('Información del Usuario', {
             'fields': ('user', 'created_at', 'updated_at')
         }),
-        ('Audio y Transcripción', {
-            'fields': ('audio_file', 'transcribed_text', 'confidence', 'duration_seconds')
+        ('Comando de Texto', {
+            'fields': ('command_text', 'confidence_score')
         }),
-        ('Comando Interpretado', {
+        ('Interpretación del Comando', {
             'fields': ('status', 'command_type', 'interpreted_params', 'processing_time_ms')
         }),
         ('Resultado', {
@@ -56,4 +56,3 @@ class VoiceCommandHistoryAdmin(admin.ModelAdmin):
     
     def has_change_permission(self, request, obj=None):
         return False
-

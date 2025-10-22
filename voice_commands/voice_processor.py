@@ -1,22 +1,25 @@
 """
-Procesador de comandos de voz - Interpreta texto y ejecuta acciones
+Procesador de comandos de texto inteligentes - Versión 2.0 Mejorada
+Interpreta texto en lenguaje natural y ejecuta acciones
 """
 import logging
 import re
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Any
+from typing import Dict, Any
 from django.utils import timezone
 
-# Importar el parser y generador de reportes existentes
-from sales.prompt_parser import parse_prompt
-from sales.report_generator import ReportGenerator
+# Importar el nuevo parser unificado
+from sales.unified_command_parser import parse_command, get_available_reports
+
+# Importar el dispatcher de reportes
+from voice_commands.report_dispatcher import ReportDispatcher
 
 logger = logging.getLogger(__name__)
 
 
 class VoiceCommandProcessor:
     """
-    Procesa comandos de voz transcritos y ejecuta la acción correspondiente
+    Procesa comandos de texto inteligentes y ejecuta la acción correspondiente
+    Versión mejorada con mejor interpretación y manejo de errores
     """
     
     def __init__(self, user):
@@ -27,14 +30,13 @@ class VoiceCommandProcessor:
             user: Usuario de Django que ejecuta el comando
         """
         self.user = user
-        self.report_generator = ReportGenerator()
     
     def process_command(self, text: str) -> Dict[str, Any]:
         """
-        Procesa un comando de voz y devuelve el resultado
+        Procesa un comando de texto y devuelve el resultado
         
         Args:
-            text: Texto transcrito del comando de voz
+            text: Texto del comando en lenguaje natural
         
         Returns:
             Dict con el resultado del comando:
@@ -43,7 +45,9 @@ class VoiceCommandProcessor:
                 'command_type': str,
                 'params': dict,
                 'result': dict o None,
-                'error': str o None
+                'error': str o None,
+                'confidence': float,
+                'suggestions': list
             }
         """
         
@@ -51,34 +55,57 @@ class VoiceCommandProcessor:
             # Normalizar el texto
             text = self.normalize_text(text)
             
-            logger.info(f"🎤 Procesando comando de voz: '{text}'")
+            logger.info(f"� Procesando comando: '{text}'")
             
-            # Identificar el tipo de comando
-            command_type = self.identify_command_type(text)
+            # Parsear el comando con el nuevo sistema unificado
+            parsed = parse_command(text)
             
-            if command_type == 'reporte':
-                return self.process_report_command(text)
-            elif command_type == 'consulta':
-                return self.process_query_command(text)
-            elif command_type == 'ayuda':
-                return self.process_help_command(text)
-            else:
+            if not parsed['success']:
                 return {
                     'success': False,
-                    'command_type': 'desconocido',
+                    'command_type': 'error',
                     'params': {},
                     'result': None,
-                    'error': 'No se pudo identificar el tipo de comando. Intenta con: "generar reporte de...", "consultar...", "ayuda"'
+                    'error': parsed.get('error', 'No se pudo procesar el comando'),
+                    'confidence': 0.0,
+                    'suggestions': []
                 }
+            
+            # Verificar nivel de confianza
+            if parsed['confidence'] < 0.3:
+                return {
+                    'success': False,
+                    'command_type': 'low_confidence',
+                    'params': parsed['params'],
+                    'result': None,
+                    'error': f"No estoy seguro de haber entendido el comando. ¿Quisiste decir '{parsed['report_name']}'?",
+                    'confidence': parsed['confidence'],
+                    'suggestions': parsed['suggestions']
+                }
+            
+            logger.info(f"✅ Comando interpretado: {parsed['report_name']} (confianza: {parsed['confidence']:.2%})")
+            
+            # Identificar el tipo de comando
+            command_type = self._identify_command_type(text, parsed)
+            
+            if command_type == 'ayuda':
+                return self.process_help_command()
+            elif command_type == 'listar_reportes':
+                return self.process_list_reports_command()
+            else:
+                # Procesar como reporte
+                return self.process_report_command(parsed)
                 
         except Exception as e:
-            logger.error(f"❌ Error al procesar comando: {e}")
+            logger.error(f"❌ Error al procesar comando: {e}", exc_info=True)
             return {
                 'success': False,
                 'command_type': 'error',
                 'params': {},
                 'result': None,
-                'error': str(e)
+                'error': f"Error inesperado: {str(e)}",
+                'confidence': 0.0,
+                'suggestions': []
             }
     
     def normalize_text(self, text: str) -> str:
@@ -89,213 +116,252 @@ class VoiceCommandProcessor:
         text = re.sub(r'\s+', ' ', text)  # Múltiples espacios a uno
         return text
     
-    def identify_command_type(self, text: str) -> str:
+    def _identify_command_type(self, text: str, parsed: Dict) -> str:
         """
         Identifica el tipo de comando basándose en palabras clave
         
         Returns:
-            'reporte', 'consulta', 'ayuda', 'desconocido'
+            'reporte', 'ayuda', 'listar_reportes'
         """
-        
-        # Palabras clave para reportes
-        reporte_keywords = ['reporte', 'informe', 'genera', 'generar', 'muestra', 'mostrar']
-        
-        # Palabras clave para consultas
-        consulta_keywords = ['consultar', 'buscar', 'ver', 'listar', 'cuántos', 'cuantos']
-        
-        # Palabras clave para ayuda
-        ayuda_keywords = ['ayuda', 'help', 'cómo', 'como', 'qué puedo', 'que puedo']
-        
         text_lower = text.lower()
         
-        # Verificar palabras clave
-        if any(keyword in text_lower for keyword in reporte_keywords):
-            return 'reporte'
-        elif any(keyword in text_lower for keyword in consulta_keywords):
-            return 'consulta'
-        elif any(keyword in text_lower for keyword in ayuda_keywords):
+        # Comandos de ayuda
+        if any(word in text_lower for word in ['ayuda', 'help', 'cómo', 'como', 'qué puedo', 'que puedo']):
             return 'ayuda'
-        else:
-            return 'desconocido'
-    
-    def process_report_command(self, text: str) -> Dict[str, Any]:
-        """
-        Procesa un comando de generación de reporte
         
-        Ejemplos:
-        - "generar reporte de ventas del último mes"
-        - "mostrar productos más vendidos esta semana"
-        - "informe de clientes que más compraron en diciembre"
+        # Listar reportes disponibles
+        if any(phrase in text_lower for phrase in ['listar reportes', 'que reportes', 'qué reportes', 'reportes disponibles']):
+            return 'listar_reportes'
+        
+        # Por defecto es un reporte
+        return 'reporte'
+    
+    def process_report_command(self, parsed: Dict) -> Dict[str, Any]:
+        """
+        Procesa un comando de generación de reporte usando el resultado del parser.
+        Ahora conectado con generadores REALES de reportes.
         """
         
         try:
-            # Usar el parser existente de sales.prompt_parser
-            parsed = parse_prompt(text)
+            report_type = parsed['report_type']
+            params = parsed['params']
             
-            logger.info(f"📊 Comando parseado: {parsed}")
+            logger.info(f"📊 Generando reporte: {parsed['report_name']}")
+            logger.info(f"📅 Período: {params.get('period_text', 'No especificado')}")
+            logger.info(f"📄 Formato: {parsed['format']}")
             
-            if not parsed.get('success'):
+            # ✅ GENERAR REPORTE REAL usando el dispatcher
+            try:
+                dispatcher = ReportDispatcher(user=self.user)
+                real_data = dispatcher.dispatch(report_type, params)
+                
+                logger.info(f"✅ Reporte '{report_type}' generado exitosamente")
+                
+            except Exception as e:
+                logger.error(f"❌ Error al generar reporte con dispatcher: {e}", exc_info=True)
+                # Si falla el generador, retornamos un error descriptivo
                 return {
                     'success': False,
                     'command_type': 'reporte',
-                    'params': {},
+                    'params': self._serialize_params(params),
                     'result': None,
-                    'error': parsed.get('error', 'No se pudo interpretar el comando')
+                    'error': f"Error al generar el reporte: {str(e)}",
+                    'confidence': parsed['confidence'],
+                    'suggestions': []
                 }
             
-            # Extraer parámetros
-            params = parsed['filters']
-            report_type = self.infer_report_type(text, params)
+            # Combinar metadata del parser + datos reales del generador
+            result_data = {
+                'report_info': {
+                    'name': parsed['report_name'],
+                    'description': parsed['description'],
+                    'type': report_type,
+                    'format': parsed['format'],
+                    'generated_at': timezone.now().isoformat(),
+                    'generated_by': self.user.username
+                },
+                'parameters': {
+                    'date_range': {
+                        'start': params.get('start_date').isoformat() if params.get('start_date') else None,
+                        'end': params.get('end_date').isoformat() if params.get('end_date') else None,
+                        'description': params.get('period_text', 'No especificado')
+                    },
+                    'group_by': params.get('group_by'),
+                    'limit': params.get('limit', 10),
+                    'supports_ml': params.get('supports_ml', False)
+                },
+                'data': real_data,  # ✅ DATOS REALES del generador
+                'metadata': {
+                    'command_confidence': parsed['confidence'],
+                    'total_records': self._count_records(real_data)
+                }
+            }
             
-            # Generar el reporte usando ReportGenerator
-            if report_type == 'ventas':
-                result = self.report_generator.generate_sales_report(
-                    start_date=params.get('start_date'),
-                    end_date=params.get('end_date'),
-                    customer_id=params.get('customer_id'),
-                    product_id=params.get('product_id'),
-                )
-            elif report_type == 'productos':
-                result = self.report_generator.generate_product_report(
-                    start_date=params.get('start_date'),
-                    end_date=params.get('end_date'),
-                    category=params.get('category'),
-                    top_n=params.get('limit', 10),
-                )
-            elif report_type == 'clientes':
-                result = self.report_generator.generate_customer_report(
-                    start_date=params.get('start_date'),
-                    end_date=params.get('end_date'),
-                    top_n=params.get('limit', 10),
-                )
-            else:
-                # Por defecto, reporte de ventas
-                result = self.report_generator.generate_sales_report(
-                    start_date=params.get('start_date'),
-                    end_date=params.get('end_date'),
-                )
+            # Si el formato cambió, notificar
+            if params.get('format_changed'):
+                result_data['warnings'] = [
+                    f"El formato '{params['original_format']}' no está disponible para este reporte. Se usará '{parsed['format']}' en su lugar."
+                ]
             
             return {
                 'success': True,
                 'command_type': 'reporte',
                 'params': {
                     'report_type': report_type,
-                    'filters': params,
-                    'original_text': text,
+                    'parsed_params': self._serialize_params(params),
+                    'original_command': parsed.get('original_command', '')
                 },
-                'result': result,
-                'error': None
+                'result': result_data,
+                'error': None,
+                'confidence': parsed['confidence'],
+                'suggestions': parsed['suggestions']
             }
             
         except Exception as e:
-            logger.error(f"❌ Error al generar reporte: {e}")
+            logger.error(f"❌ Error al procesar comando de reporte: {e}", exc_info=True)
             return {
                 'success': False,
                 'command_type': 'reporte',
-                'params': {},
+                'params': parsed.get('params', {}),
                 'result': None,
-                'error': f"Error al generar el reporte: {str(e)}"
+                'error': f"Error al procesar el comando: {str(e)}",
+                'confidence': parsed.get('confidence', 0.0),
+                'suggestions': []
             }
     
-    def infer_report_type(self, text: str, params: Dict) -> str:
+    def _serialize_params(self, params: Dict) -> Dict:
         """
-        Infiere el tipo de reporte basándose en el texto
-        
-        Returns:
-            'ventas', 'productos', 'clientes'
+        Convierte parámetros a formato serializable (para JSON).
+        Convierte objetos datetime a strings ISO.
         """
-        text_lower = text.lower()
-        
-        if any(word in text_lower for word in ['producto', 'productos', 'artículo', 'artículos', 'vendidos']):
-            return 'productos'
-        elif any(word in text_lower for word in ['cliente', 'clientes', 'comprador', 'compradores']):
-            return 'clientes'
-        else:
-            return 'ventas'
+        serializable_params = {}
+        for key, value in params.items():
+            if hasattr(value, 'isoformat'):  # Es un objeto datetime
+                serializable_params[key] = value.isoformat()
+            else:
+                serializable_params[key] = value
+        return serializable_params
     
-    def process_query_command(self, text: str) -> Dict[str, Any]:
+    def _count_records(self, data: Dict) -> int:
         """
-        Procesa un comando de consulta simple
-        
-        Ejemplos:
-        - "cuántos productos tenemos"
-        - "consultar ventas de hoy"
+        Cuenta el número de registros en los datos del reporte.
+        Útil para metadata.
         """
-        
-        # Por ahora, redirigir a reporte
-        return self.process_report_command(text)
+        try:
+            if isinstance(data, dict):
+                # Intentar diferentes estructuras
+                if 'rows' in data:
+                    return len(data['rows'])
+                elif 'data' in data and isinstance(data['data'], list):
+                    return len(data['data'])
+                elif 'predictions' in data and isinstance(data['predictions'], list):
+                    return len(data['predictions'])
+                elif 'recommendations' in data and isinstance(data['recommendations'], list):
+                    return len(data['recommendations'])
+            return 0
+        except:
+            return 0
     
-    def process_help_command(self, text: str) -> Dict[str, Any]:
+    def process_help_command(self) -> Dict[str, Any]:
         """
         Procesa un comando de ayuda
         """
         
         help_text = """
-        **Comandos de voz disponibles:**
-        
-        📊 **Reportes de Ventas:**
-        - "Generar reporte de ventas del último mes"
-        - "Mostrar ventas de esta semana"
-        - "Informe de ventas de diciembre"
-        
-        📦 **Reportes de Productos:**
-        - "Productos más vendidos del mes"
-        - "Mostrar artículos vendidos esta semana"
-        - "Top 10 productos del año"
-        
-        👥 **Reportes de Clientes:**
-        - "Clientes que más compraron"
-        - "Mejores compradores del mes"
-        - "Top clientes de esta semana"
-        
-        📅 **Referencias de tiempo válidas:**
-        - "hoy", "ayer", "esta semana", "este mes", "este año"
-        - "última semana", "último mes", "último año"
-        - "en diciembre", "en 2024"
-        - "desde el 1 de enero hasta hoy"
-        
-        💡 **Consejos:**
-        - Habla claramente y en español
-        - Usa frases completas
-        - Especifica el período de tiempo que te interesa
-        """
+**🤖 Sistema de Comandos Inteligentes - Ayuda**
+
+**📊 TIPOS DE REPORTES DISPONIBLES:**
+
+**Reportes Básicos:**
+- Ventas generales
+- Ventas por producto
+- Ventas por cliente
+- Ventas por categoría
+- Ventas por fecha
+
+**Reportes Avanzados:**
+- Análisis RFM de clientes (segmentación VIP, Regular, En Riesgo)
+- Análisis ABC de productos (clasificación Pareto)
+- Dashboard ejecutivo (KPIs y métricas)
+- Análisis de inventario
+- Reportes comparativos
+
+**Reportes con Machine Learning:**
+- Predicciones de ventas futuras
+- Predicciones por producto
+- Sistema de recomendaciones
+- Dashboard ML completo
+
+**📅 FORMAS DE ESPECIFICAR FECHAS:**
+- "hoy", "ayer"
+- "esta semana", "este mes", "este año"
+- "último mes", "mes pasado", "último año"
+- "últimos 7 días", "últimos 30 días"
+- "mes de octubre", "mes de diciembre"
+- "año 2024", "del año 2023"
+- "del 01/10/2024 al 18/10/2024"
+
+**📄 FORMATOS DE SALIDA:**
+- JSON (por defecto) - Agregar "en JSON"
+- PDF - Agregar "en PDF"
+- Excel - Agregar "en Excel"
+
+**💡 EJEMPLOS DE COMANDOS:**
+✓ "reporte de ventas del último mes en PDF"
+✓ "productos más vendidos esta semana"
+✓ "dashboard ejecutivo de octubre"
+✓ "predicciones de ventas para los próximos 7 días"
+✓ "análisis RFM de clientes en Excel"
+✓ "ventas por cliente del año 2024"
+✓ "top 5 productos de esta semana"
+
+**🎯 CONSEJOS:**
+- Sé específico con las fechas
+- Indica el formato de salida si lo deseas
+- Usa lenguaje natural, el sistema te entenderá
+- Si no estás seguro, pide "listar reportes disponibles"
+"""
         
         return {
             'success': True,
             'command_type': 'ayuda',
             'params': {},
             'result': {'help_text': help_text},
-            'error': None
+            'error': None,
+            'confidence': 1.0,
+            'suggestions': []
         }
     
-    def extract_date_from_text(self, text: str) -> Optional[datetime]:
+    def process_list_reports_command(self) -> Dict[str, Any]:
         """
-        Extrae una fecha específica del texto
-        
-        Ejemplos: "1 de enero", "15 de diciembre de 2024"
+        Lista todos los reportes disponibles
         """
         
-        # Mapa de meses en español
-        meses = {
-            'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
-            'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
-            'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
-        }
-        
-        # Patrón: "15 de diciembre de 2024" o "1 de enero"
-        pattern = r'(\d{1,2})\s+de\s+(\w+)(?:\s+de\s+(\d{4}))?'
-        match = re.search(pattern, text.lower())
-        
-        if match:
-            day = int(match.group(1))
-            month_name = match.group(2)
-            year = int(match.group(3)) if match.group(3) else timezone.now().year
+        try:
+            catalog = get_available_reports()
             
-            if month_name in meses:
-                month = meses[month_name]
-                try:
-                    return datetime(year, month, day)
-                except ValueError:
-                    pass
-        
-        return None
+            return {
+                'success': True,
+                'command_type': 'listar_reportes',
+                'params': {},
+                'result': {
+                    'catalog': catalog,
+                    'total_reports': catalog['total_reports'],
+                    'message': f"Hay {catalog['total_reports']} tipos de reportes disponibles"
+                },
+                'error': None,
+                'confidence': 1.0,
+                'suggestions': []
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error al listar reportes: {e}")
+            return {
+                'success': False,
+                'command_type': 'listar_reportes',
+                'params': {},
+                'result': None,
+                'error': str(e),
+                'confidence': 0.0,
+                'suggestions': []
+            }

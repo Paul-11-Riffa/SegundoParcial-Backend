@@ -5,19 +5,17 @@ from django.utils import timezone
 
 class VoiceCommand(models.Model):
     """
-    Almacena comandos de voz procesados y su resultado
+    Almacena comandos de texto inteligentes procesados y su resultado
     """
     
     STATUS_CHOICES = [
         ('PROCESSING', 'Procesando'),
-        ('TRANSCRIBED', 'Transcrito'),
         ('EXECUTED', 'Ejecutado'),
         ('FAILED', 'Fallido'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='voice_commands')
-    audio_file = models.FileField(upload_to='voice_commands/', null=True, blank=True)
-    transcribed_text = models.TextField(blank=True, null=True, help_text='Texto transcrito del audio')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='text_commands')
+    command_text = models.TextField(default='comando sin texto', help_text='Texto del comando ingresado por el usuario')
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PROCESSING')
     
@@ -30,17 +28,16 @@ class VoiceCommand(models.Model):
     error_message = models.TextField(blank=True, null=True)
     
     # Metadata
-    duration_seconds = models.FloatField(null=True, blank=True, help_text='Duración del audio en segundos')
     processing_time_ms = models.IntegerField(null=True, blank=True, help_text='Tiempo de procesamiento en milisegundos')
-    confidence = models.FloatField(null=True, blank=True, help_text='Confianza de la transcripción (0-1)')
+    confidence_score = models.FloatField(null=True, blank=True, help_text='Confianza en la interpretación del comando (0-1)')
     
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-created_at']
-        verbose_name = 'Comando de Voz'
-        verbose_name_plural = 'Comandos de Voz'
+        verbose_name = 'Comando de Texto'
+        verbose_name_plural = 'Comandos de Texto'
     
     def __str__(self):
         return f"{self.user.username} - {self.command_type or 'Sin procesar'} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
@@ -65,4 +62,3 @@ class VoiceCommandHistory(models.Model):
     
     def __str__(self):
         return f"{self.voice_command.id} - {self.stage} - {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-
