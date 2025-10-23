@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     CartView, CartItemView, StripeCheckoutView, StripeWebhookView, CompleteOrderView, 
     ManualOrderCompletionView, SalesHistoryView, GenerateOrderReceiptPDF, MyOrderListView,
-    GenerateDynamicReportView
+    GenerateDynamicReportView, GenerateMyOrderReceiptPDF
 )
 
 urlpatterns = [
@@ -16,6 +16,7 @@ urlpatterns = [
     path('sales-history/', SalesHistoryView.as_view(), name='sales-history'),
     path('sales-history/<int:order_id>/receipt/', GenerateOrderReceiptPDF.as_view(), name='order-receipt'),
     path('my-orders/', MyOrderListView.as_view(), name='my-orders'),
+    path('my-orders/<int:order_id>/receipt/', GenerateMyOrderReceiptPDF.as_view(), name='my-order-receipt'),
     path('debug/complete-order/', ManualOrderCompletionView.as_view(), name='debug-complete-order'),
     path('reports/generate/', GenerateDynamicReportView.as_view(), name='generate-report'),
 ]

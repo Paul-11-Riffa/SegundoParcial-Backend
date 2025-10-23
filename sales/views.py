@@ -394,7 +394,7 @@ class SalesHistoryView(generics.ListAPIView):
         """
         return Order.objects.filter(status='COMPLETED').order_by('-updated_at')
 
-# --- VISTA PARA GENERAR COMPROBANTES EN PDF ---
+# --- VISTA PARA GENERAR COMPROBANTES EN PDF (ADMIN) ---
 class GenerateOrderReceiptPDF(views.APIView):
     permission_classes = [permissions.IsAdminUser]
 
@@ -407,56 +407,263 @@ class GenerateOrderReceiptPDF(views.APIView):
 
         # 2. Creamos una respuesta HTTP de tipo PDF
         response_pdf = HttpResponse(content_type='application/pdf')
-        response_pdf['Content-Disposition'] = f'attachment; filename="receipt_order_{order.id}.pdf"'
+        response_pdf['Content-Disposition'] = f'attachment; filename="comprobante_venta_{order.id}.pdf"'
 
         # 3. Creamos el lienzo del PDF
         p = canvas.Canvas(response_pdf, pagesize=letter)
         width, height = letter
 
-        # --- DIBUJAMOS EL CONTENIDO DEL PDF ---
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(72, height - 72, "Nota de Venta / Comprobante")
-
-        p.setFont("Helvetica", 12)
-        p.drawString(72, height - 108, f"Orden N°: {order.id}")
-        p.drawString(72, height - 126, f"Fecha: {order.updated_at.strftime('%d/%m/%Y %H:%M')}")
-
-        p.drawString(width - 250, height - 108, "Cliente:")
+        # --- ENCABEZADO CON LOGO Y EMPRESA ---
+        # Nombre de la empresa grande y destacado
+        p.setFont("Helvetica-Bold", 32)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawCentredString(width / 2, height - 60, "SMARTSALES365")
+        
+        # Línea decorativa bajo el nombre
+        p.setStrokeColor(colors.HexColor('#764ba2'))
+        p.setLineWidth(3)
+        p.line(72, height - 75, width - 72, height - 75)
+        
+        # Subtítulo de la empresa
+        p.setFont("Helvetica", 11)
+        p.setFillColor(colors.HexColor('#495057'))
+        p.drawCentredString(width / 2, height - 95, "Sistema Inteligente de Gestión Comercial")
+        
+        # --- INFORMACIÓN DEL COMPROBANTE ---
+        p.setFont("Helvetica-Bold", 18)
+        p.setFillColor(colors.HexColor('#1a222e'))
+        p.drawCentredString(width / 2, height - 130, "COMPROBANTE DE VENTA")
+        
+        # Recuadro con información de la orden
+        p.setStrokeColor(colors.HexColor('#667eea'))
+        p.setLineWidth(1.5)
+        p.rect(72, height - 200, (width - 144) / 2 - 10, 50, stroke=1, fill=0)
+        p.rect(width / 2 + 10, height - 200, (width - 144) / 2 - 10, 50, stroke=1, fill=0)
+        
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawString(82, height - 160, "N° DE ORDEN:")
+        p.drawString(width / 2 + 20, height - 160, "FECHA DE EMISIÓN:")
+        
+        p.setFont("Helvetica-Bold", 14)
+        p.setFillColor(colors.black)
+        p.drawString(82, height - 180, f"#{order.id:05d}")
         p.setFont("Helvetica-Bold", 12)
-        p.drawString(width - 250, height - 126, f"{order.customer.first_name} {order.customer.last_name}")
-        p.setFont("Helvetica", 12)
-        p.drawString(width - 250, height - 144, f"(@{order.customer.username})")
+        p.drawString(width / 2 + 20, height - 180, order.updated_at.strftime('%d/%m/%Y %H:%M'))
 
-        p.line(72, height - 160, width - 72, height - 160) # Línea divisoria
+        # --- INFORMACIÓN DEL CLIENTE ---
+        p.setStrokeColor(colors.HexColor('#667eea'))
+        p.rect(72, height - 260, width - 144, 45, stroke=1, fill=0)
+        
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawString(82, height - 225, "CLIENTE:")
+        
+        customer_name = f"{order.customer.first_name} {order.customer.last_name}".strip()
+        if not customer_name:
+            customer_name = order.customer.username
+        
+        p.setFont("Helvetica-Bold", 13)
+        p.setFillColor(colors.black)
+        p.drawString(82, height - 243, customer_name)
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#6c757d'))
+        p.drawString(82, height - 255, f"Email: {order.customer.email}")
 
-        # 4. Creamos la tabla de productos
-        table_data = [['Producto', 'Cantidad', 'Precio Unit.', 'Subtotal']]
+        # --- TABLA DE PRODUCTOS ---
+        table_data = [['PRODUCTO', 'CANT.', 'PRECIO UNIT.', 'SUBTOTAL']]
         for item in order.items.all():
             subtotal = item.quantity * item.price
             table_data.append([
                 item.product.name,
                 str(item.quantity),
-                f"${item.price:.2f} USD",
-                f"${subtotal:.2f} USD"
+                f"${item.price:.2f}",
+                f"${subtotal:.2f}"
             ])
 
-        table = Table(table_data, colWidths=[3.5 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
+        table = Table(table_data, colWidths=[3.5 * inch, 0.8 * inch, 1.2 * inch, 1.3 * inch])
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A222E')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('TOPPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1.5, colors.HexColor('#e9ecef')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
 
         table_height = table.wrap(width, height)[1]
-        table.drawOn(p, 72, height - 200 - table_height)
+        table.drawOn(p, 72, height - 290 - table_height)
 
-        # 5. Dibujamos el total al final
+        # --- TOTAL ---
+        # Recuadro para el total
+        total_y = height - 310 - table_height
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.rect(width - 252, total_y - 45, 180, 40, stroke=0, fill=1)
+        
+        p.setFont("Helvetica-Bold", 12)
+        p.setFillColor(colors.white)
+        p.drawString(width - 240, total_y - 20, "TOTAL A PAGAR:")
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(width - 240, total_y - 38, f"${order.total_price:.2f} USD")
+
+        # --- PIE DE PÁGINA ---
+        footer_y = 100
+        p.setFont("Helvetica", 9)
+        p.setFillColor(colors.HexColor('#6c757d'))
+        p.drawCentredString(width / 2, footer_y, "Gracias por su compra - SmartSales365")
+        p.drawCentredString(width / 2, footer_y - 15, "www.smartsales365.com | contacto@smartsales365.com")
+        
+        # Línea decorativa en el pie
+        p.setStrokeColor(colors.HexColor('#764ba2'))
+        p.setLineWidth(2)
+        p.line(72, footer_y - 30, width - 72, footer_y - 30)
+
+        p.showPage()
+        p.save()
+
+        return response_pdf
+
+
+# --- VISTA PARA GENERAR COMPROBANTES EN PDF (CLIENTE) ---
+class GenerateMyOrderReceiptPDF(views.APIView):
+    """
+    Endpoint para que un cliente genere el comprobante de su propia orden.
+    Solo puede acceder a sus propias órdenes completadas.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, order_id):
+        try:
+            # 1. Buscamos la orden completada que pertenezca al usuario actual
+            order = Order.objects.get(id=order_id, status='COMPLETED', customer=request.user)
+        except Order.DoesNotExist:
+            return response.Response({'error': 'Orden completada no encontrada o no tienes acceso a ella.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Creamos una respuesta HTTP de tipo PDF
+        response_pdf = HttpResponse(content_type='application/pdf')
+        response_pdf['Content-Disposition'] = f'attachment; filename="comprobante_orden_{order.id}.pdf"'
+
+        # 3. Creamos el lienzo del PDF
+        p = canvas.Canvas(response_pdf, pagesize=letter)
+        width, height = letter
+
+        # --- ENCABEZADO CON LOGO Y EMPRESA ---
+        # Nombre de la empresa grande y destacado
+        p.setFont("Helvetica-Bold", 32)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawCentredString(width / 2, height - 60, "SMARTSALES365")
+        
+        # Línea decorativa bajo el nombre
+        p.setStrokeColor(colors.HexColor('#764ba2'))
+        p.setLineWidth(3)
+        p.line(72, height - 75, width - 72, height - 75)
+        
+        # Subtítulo de la empresa
+        p.setFont("Helvetica", 11)
+        p.setFillColor(colors.HexColor('#495057'))
+        p.drawCentredString(width / 2, height - 95, "Sistema Inteligente de Gestión Comercial")
+        
+        # --- INFORMACIÓN DEL COMPROBANTE ---
+        p.setFont("Helvetica-Bold", 18)
+        p.setFillColor(colors.HexColor('#1a222e'))
+        p.drawCentredString(width / 2, height - 130, "COMPROBANTE DE COMPRA")
+        
+        # Recuadro con información de la orden
+        p.setStrokeColor(colors.HexColor('#667eea'))
+        p.setLineWidth(1.5)
+        p.rect(72, height - 200, (width - 144) / 2 - 10, 50, stroke=1, fill=0)
+        p.rect(width / 2 + 10, height - 200, (width - 144) / 2 - 10, 50, stroke=1, fill=0)
+        
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawString(82, height - 160, "N° DE ORDEN:")
+        p.drawString(width / 2 + 20, height - 160, "FECHA DE COMPRA:")
+        
         p.setFont("Helvetica-Bold", 14)
-        p.drawRightString(width - 72, height - 220 - table_height, f"Total: ${order.total_price:.2f} USD")
+        p.setFillColor(colors.black)
+        p.drawString(82, height - 180, f"#{order.id:05d}")
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(width / 2 + 20, height - 180, order.updated_at.strftime('%d/%m/%Y %H:%M'))
+
+        # --- INFORMACIÓN DEL CLIENTE ---
+        p.setStrokeColor(colors.HexColor('#667eea'))
+        p.rect(72, height - 260, width - 144, 45, stroke=1, fill=0)
+        
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.drawString(82, height - 225, "DATOS DEL CLIENTE:")
+        
+        customer_name = f"{order.customer.first_name} {order.customer.last_name}".strip()
+        if not customer_name:
+            customer_name = order.customer.username
+        
+        p.setFont("Helvetica-Bold", 13)
+        p.setFillColor(colors.black)
+        p.drawString(82, height - 243, customer_name)
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.HexColor('#6c757d'))
+        p.drawString(82, height - 255, f"Email: {order.customer.email}")
+
+        # --- TABLA DE PRODUCTOS ---
+        table_data = [['PRODUCTO', 'CANT.', 'PRECIO UNIT.', 'SUBTOTAL']]
+        for item in order.items.all():
+            subtotal = item.quantity * item.price
+            table_data.append([
+                item.product.name,
+                str(item.quantity),
+                f"${item.price:.2f}",
+                f"${subtotal:.2f}"
+            ])
+
+        table = Table(table_data, colWidths=[3.5 * inch, 0.8 * inch, 1.2 * inch, 1.3 * inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1.5, colors.HexColor('#e9ecef')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+
+        table_height = table.wrap(width, height)[1]
+        table.drawOn(p, 72, height - 290 - table_height)
+
+        # --- TOTAL ---
+        # Recuadro para el total
+        total_y = height - 310 - table_height
+        p.setFillColor(colors.HexColor('#667eea'))
+        p.rect(width - 252, total_y - 45, 180, 40, stroke=0, fill=1)
+        
+        p.setFont("Helvetica-Bold", 12)
+        p.setFillColor(colors.white)
+        p.drawString(width - 240, total_y - 20, "TOTAL PAGADO:")
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(width - 240, total_y - 38, f"${order.total_price:.2f} USD")
+
+        # --- PIE DE PÁGINA ---
+        footer_y = 100
+        p.setFont("Helvetica", 9)
+        p.setFillColor(colors.HexColor('#6c757d'))
+        p.drawCentredString(width / 2, footer_y, "¡Gracias por su compra! - SmartSales365")
+        p.drawCentredString(width / 2, footer_y - 15, "www.smartsales365.com | contacto@smartsales365.com")
+        p.drawCentredString(width / 2, footer_y - 30, "Este documento es un comprobante válido de su compra")
+        
+        # Línea decorativa en el pie
+        p.setStrokeColor(colors.HexColor('#764ba2'))
+        p.setLineWidth(2)
+        p.line(72, footer_y - 45, width - 72, footer_y - 45)
 
         p.showPage()
         p.save()
