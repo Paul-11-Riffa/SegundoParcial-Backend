@@ -1,6 +1,8 @@
 from django.urls import path
 from .views import (
     CartView, CartItemView, StripeCheckoutView, StripeWebhookView, CompleteOrderView, 
+    ManualOrderCompletionView, SalesHistoryView, GenerateOrderReceiptPDF, MyOrderListView,
+    GenerateDynamicReportView, GenerateMyOrderReceiptPDF
     ManualOrderCompletionView, SalesHistoryView, SalesHistoryDetailView, GenerateOrderReceiptPDF, MyOrderListView
     # ❌ ELIMINADO: GenerateDynamicReportView (duplicado - usar sistema unificado)
 )
@@ -52,6 +54,7 @@ urlpatterns = [
     path('sales-history/<int:pk>/', SalesHistoryDetailView.as_view(), name='sales-history-detail'),
     path('sales-history/<int:order_id>/receipt/', GenerateOrderReceiptPDF.as_view(), name='order-receipt'),
     path('my-orders/', MyOrderListView.as_view(), name='my-orders'),
+    path('my-orders/<int:order_id>/receipt/', GenerateMyOrderReceiptPDF.as_view(), name='my-order-receipt'),
     path('debug/complete-order/', ManualOrderCompletionView.as_view(), name='debug-complete-order'),
     
     # === 🚀 SISTEMA UNIFICADO DE REPORTES INTELIGENTES (NUEVO) ===
