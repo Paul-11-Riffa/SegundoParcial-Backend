@@ -4,12 +4,22 @@ Sistema de gestión de modelos ML: serialización, versionado y carga.
 import os
 import joblib
 import json
+import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from django.conf import settings
+from django.core.cache import cache
 from sales.ml_predictor_simple import SimpleSalesPredictor
+
+
+# Lock global para evitar carga concurrente de modelos
+_model_load_lock = threading.Lock()
+
+# Clave para Django cache
+PREDICTOR_CACHE_KEY = 'ml_sales_predictor_instance'
+PREDICTOR_CACHE_TIMEOUT = 300  # 5 minutos
 
 
 class ModelManager:
@@ -112,59 +122,92 @@ class ModelManager:
         
         return model_info
     
-    def load_model(self, version: Optional[str] = None) -> SimpleSalesPredictor:
+    def load_model(self, version: Optional[str] = None, use_cache: bool = True) -> SimpleSalesPredictor:
         """
-        Carga un modelo guardado desde disco.
+        Carga un modelo guardado desde disco (con thread safety y Django cache).
         
         Args:
             version: Versión del modelo a cargar (usa el actual si es None)
+            use_cache: Si True, intenta usar caché de Django primero
             
         Returns:
             Instancia de SimpleSalesPredictor con el modelo cargado
         """
-        metadata = self._load_metadata()
+        # Intentar obtener del caché de Django primero
+        if use_cache:
+            cached_predictor = cache.get(PREDICTOR_CACHE_KEY)
+            if cached_predictor is not None:
+                print(f"✓ Usando modelo desde Django cache")
+                return cached_predictor
         
-        if not metadata['models']:
-            raise ValueError("No hay modelos guardados")
-        
-        # Determinar qué modelo cargar
-        if version is None:
-            version = metadata['current_model']
+        # Usar lock para evitar cargas concurrentes
+        with _model_load_lock:
+            # Verificar caché nuevamente dentro del lock (double-check locking)
+            if use_cache:
+                cached_predictor = cache.get(PREDICTOR_CACHE_KEY)
+                if cached_predictor is not None:
+                    print(f"✓ Usando modelo desde Django cache (double-check)")
+                    return cached_predictor
+            
+            print(f"📂 Cargando modelo desde disco...")
+            
+            metadata = self._load_metadata()
+            
+            if not metadata['models']:
+                raise ValueError("No hay modelos guardados")
+            
+            # Determinar qué modelo cargar
             if version is None:
-                raise ValueError("No hay modelo actual definido")
-        
-        # Buscar información del modelo
-        model_info = None
-        for m in metadata['models']:
-            if m['version'] == version:
-                model_info = m
-                break
-        
-        if model_info is None:
-            raise ValueError(f"No se encontró el modelo con versión: {version}")
-        
-        # Cargar modelo
-        filepath = self.models_dir / model_info['filename']
-        
-        if not filepath.exists():
-            raise FileNotFoundError(f"Archivo de modelo no encontrado: {filepath}")
-        
-        print(f"📂 Cargando modelo: {model_info['version']}")
-        
-        model_data = joblib.load(filepath)
-        
-        # Crear predictor y restaurar estado
-        predictor = SimpleSalesPredictor()
-        predictor.model = model_data['model']
-        predictor.poly_features = model_data.get('poly_features')
-        predictor.training_data = model_data['training_data']
-        predictor.last_trained = model_data['last_trained']
-        predictor.metrics = model_data['metrics']
-        predictor.min_date = model_data.get('min_date')
-        
-        print(f"✓ Modelo cargado exitosamente")
-        print(f"  Entrenado: {model_data['last_trained']}")
-        print(f"  Muestras: {model_data['metrics'].get('training_samples', 'N/A')}")
+                version = metadata['current_model']
+                if version is None:
+                    raise ValueError("No hay modelo actual definido")
+            
+            # Buscar información del modelo
+            model_info = None
+            for m in metadata['models']:
+                if m['version'] == version:
+                    model_info = m
+                    break
+            
+            if model_info is None:
+                raise ValueError(f"No se encontró el modelo con versión: {version}")
+            
+            # Cargar modelo
+            filepath = self.models_dir / model_info['filename']
+            
+            if not filepath.exists():
+                raise FileNotFoundError(f"Archivo de modelo no encontrado: {filepath}")
+            
+            print(f"  � Archivo: {model_info['filename']}")
+            
+            try:
+                model_data = joblib.load(filepath)
+            except Exception as e:
+                print(f"⚠️  Error al cargar modelo: {e}")
+                print(f"   Limpiando caché y reintentando...")
+                cache.delete(PREDICTOR_CACHE_KEY)
+                raise ValueError(f"Modelo corrupto o incompatible: {e}")
+            
+            # Crear predictor y restaurar estado
+            predictor = SimpleSalesPredictor()
+            predictor.model = model_data['model']
+            predictor.poly_features = model_data.get('poly_features')
+            predictor.training_data = model_data['training_data']
+            predictor.last_trained = model_data['last_trained']
+            predictor.metrics = model_data['metrics']
+            predictor.min_date = model_data.get('min_date')
+            
+            # Cachear en Django cache (compartido entre todos los workers)
+            try:
+                cache.set(PREDICTOR_CACHE_KEY, predictor, PREDICTOR_CACHE_TIMEOUT)
+                print(f"✓ Modelo cargado y guardado en Django cache ({PREDICTOR_CACHE_TIMEOUT}s)")
+            except Exception as e:
+                print(f"⚠️  No se pudo cachear el modelo: {e}")
+            
+            print(f"  ✓ Entrenado: {model_data['last_trained']}")
+            print(f"  ✓ Muestras: {model_data['metrics'].get('training_samples', 'N/A')}")
+            
+            return predictor
         
         return predictor
     
@@ -266,19 +309,45 @@ class ModelManager:
     
     def get_or_create_current_model(self) -> SimpleSalesPredictor:
         """
-        Obtiene el modelo actual o crea uno nuevo si no existe.
+        Obtiene el modelo actual. Si no existe o falla, lanza error descriptivo.
+        NO entrena automáticamente para evitar timeouts.
         
         Returns:
             Instancia de SimpleSalesPredictor
+            
+        Raises:
+            ValueError: Si no hay modelo o no se puede cargar
         """
         try:
-            return self.load_model()
-        except (ValueError, FileNotFoundError):
-            print("⚠️  No hay modelo actual. Entrenando nuevo modelo...")
-            predictor = SimpleSalesPredictor()
-            predictor.train()
-            self.save_model(predictor, notes="Modelo inicial entrenado automáticamente")
-            return predictor
+            return self.load_model(use_cache=True)
+        except ValueError as e:
+            error_msg = (
+                f"No se pudo cargar el modelo: {str(e)}\n"
+                "Por favor, entrena un modelo manualmente usando:\n"
+                "POST /api/orders/ml/train/"
+            )
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        except FileNotFoundError as e:
+            error_msg = (
+                f"Archivo de modelo no encontrado: {str(e)}\n"
+                "El modelo puede haber sido eliminado. Entrena uno nuevo usando:\n"
+                "POST /api/orders/ml/train/"
+            )
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Error inesperado al cargar modelo: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+    
+    def clear_predictor_cache(self):
+        """
+        Limpia el caché del predictor.
+        Útil cuando se entrena un nuevo modelo.
+        """
+        cache.delete(PREDICTOR_CACHE_KEY)
+        print("✓ Caché del predictor limpiado")
     
     @property
     def current_model_version(self) -> Optional[str]:

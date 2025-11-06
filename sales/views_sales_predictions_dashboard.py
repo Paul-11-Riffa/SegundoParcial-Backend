@@ -61,8 +61,7 @@ def sales_predictions_dashboard(request):
             return Response({
                 'success': True,
                 'data': cached_data,
-                'cached': True,
-                'cache_expires_in_seconds': cache.ttl(cache_key)
+                'cached': True
             })
 
         # Obtener predictor entrenado
