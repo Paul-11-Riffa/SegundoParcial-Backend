@@ -153,7 +153,29 @@
       },
       "notes": "Modelo compatible con scikit-learn 1.7.2",
       "file_size_mb": 0.01
+    },
+    {
+      "version": "20251108_095507",
+      "filename": "sales_model_20251108_095507.pkl",
+      "saved_at": "2025-11-08T09:55:07.531984",
+      "metrics": {
+        "training_samples": 90,
+        "start_date": "2025-08-07",
+        "end_date": "2025-11-04",
+        "total_sales": 8741038.74,
+        "average_daily_sales": 97122.65266666668,
+        "std_daily_sales": 29434.18922459516,
+        "min_daily_sales": 71658.19,
+        "max_daily_sales": 265298.33,
+        "trained_at": "2025-11-08T13:55:07.521708+00:00",
+        "mae": 13241.519953486491,
+        "rmse": 19533.63274451429,
+        "mape": 12.886307533635295,
+        "r2_score": 0.5546367431862019
+      },
+      "notes": "Entrenamiento manual desde API",
+      "file_size_mb": 0.01
     }
   ],
-  "current_model": "20251105_201019"
+  "current_model": "20251108_095507"
 }

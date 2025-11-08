@@ -51,16 +51,29 @@ class VoiceCommandProcessor:
             }
         """
         
+        logger.info("🟢 [PROCESSOR-1/7] ==================== VoiceCommandProcessor.process_command INICIADO ====================")
+        logger.info(f"🟢 [PROCESSOR-1/7] Texto recibido: '{text}' (length={len(text)}, user={self.user.username})")
+        
         try:
             # Normalizar el texto
+            logger.info("🟢 [PROCESSOR-2/7] Normalizando texto...")
             text = self.normalize_text(text)
+            logger.info(f"🟢 [PROCESSOR-2/7] ✅ Texto normalizado: '{text}'")
             
-            logger.info(f"� Procesando comando: '{text}'")
+            logger.info(f"🟢 [PROCESSOR-3/7] ⏳ Llamando a parse_command() - PUNTO CRÍTICO")
+            logger.info(f"🟢 [PROCESSOR-3/7]    Timestamp antes: {timezone.now()}")
             
             # Parsear el comando con el nuevo sistema unificado
             parsed = parse_command(text)
             
+            logger.info(f"🟢 [PROCESSOR-3/7] ✅ parse_command() COMPLETADO")
+            logger.info(f"🟢 [PROCESSOR-3/7]    Success: {parsed.get('success')}")
+            logger.info(f"🟢 [PROCESSOR-3/7]    Report type: {parsed.get('report_type')}")
+            logger.info(f"🟢 [PROCESSOR-3/7]    Confidence: {parsed.get('confidence')}")
+            logger.info(f"🟢 [PROCESSOR-3/7]    Confidence: {parsed.get('confidence')}")
+            
             if not parsed['success']:
+                logger.warning(f"🟢 [PROCESSOR-3/7] ⚠️ Parser falló: {parsed.get('error')}")
                 return {
                     'success': False,
                     'command_type': 'error',
@@ -73,6 +86,7 @@ class VoiceCommandProcessor:
             
             # Verificar nivel de confianza
             if parsed['confidence'] < 0.3:
+                logger.warning(f"🟢 [PROCESSOR-3/7] ⚠️ Confianza baja: {parsed['confidence']:.2%}")
                 return {
                     'success': False,
                     'command_type': 'low_confidence',
@@ -83,21 +97,32 @@ class VoiceCommandProcessor:
                     'suggestions': parsed['suggestions']
                 }
             
-            logger.info(f"✅ Comando interpretado: {parsed['report_name']} (confianza: {parsed['confidence']:.2%})")
+            logger.info(f"🟢 [PROCESSOR-4/7] ✅ Comando interpretado: {parsed['report_name']} (confianza: {parsed['confidence']:.2%})")
             
             # Identificar el tipo de comando
+            logger.info(f"🟢 [PROCESSOR-5/7] Identificando tipo de comando...")
             command_type = self._identify_command_type(text, parsed)
+            logger.info(f"🟢 [PROCESSOR-5/7] ✅ Tipo identificado: {command_type}")
+            logger.info(f"🟢 [PROCESSOR-5/7] ✅ Tipo identificado: {command_type}")
             
             if command_type == 'ayuda':
+                logger.info("🟢 [PROCESSOR-6/7] Procesando comando de ayuda")
                 return self.process_help_command()
             elif command_type == 'listar_reportes':
+                logger.info("🟢 [PROCESSOR-6/7] Procesando listar reportes")
                 return self.process_list_reports_command()
             else:
                 # Procesar como reporte
-                return self.process_report_command(parsed)
+                logger.info(f"🟢 [PROCESSOR-6/7] ⏳ Procesando como reporte: {parsed['report_type']}")
+                logger.info(f"🟢 [PROCESSOR-6/7]    Llamando a process_report_command()")
+                result = self.process_report_command(parsed)
+                logger.info(f"🟢 [PROCESSOR-6/7] ✅ process_report_command() COMPLETADO")
+                logger.info(f"🟢 [PROCESSOR-7/7] ==================== VoiceCommandProcessor.process_command COMPLETADO ====================")
+                return result
                 
         except Exception as e:
-            logger.error(f"❌ Error al procesar comando: {e}", exc_info=True)
+            logger.error(f"🟢 [PROCESSOR-ERROR] ❌ EXCEPCIÓN en VoiceCommandProcessor: {type(e).__name__}: {e}")
+            logger.error(f"🟢 [PROCESSOR-ERROR] Stacktrace:", exc_info=True)
             return {
                 'success': False,
                 'command_type': 'error',
@@ -142,23 +167,39 @@ class VoiceCommandProcessor:
         Ahora conectado con generadores REALES de reportes.
         """
         
+        logger.info(f"🟠 [REPORT-1/5] ==================== process_report_command INICIADO ====================")
+        logger.info(f"🟠 [REPORT-1/5] Report type: {parsed['report_type']}")
+        logger.info(f"🟠 [REPORT-1/5] Report name: {parsed['report_name']}")
+        logger.info(f"� [REPORT-1/5] Format: {parsed['format']}")
+        
         try:
             report_type = parsed['report_type']
             params = parsed['params']
             
-            logger.info(f"📊 Generando reporte: {parsed['report_name']}")
-            logger.info(f"📅 Período: {params.get('period_text', 'No especificado')}")
-            logger.info(f"📄 Formato: {parsed['format']}")
+            logger.info(f"� [REPORT-2/5] Período: {params.get('period_text', 'No especificado')}")
+            logger.info(f"� [REPORT-2/5] Formato: {parsed['format']}")
             
             # ✅ GENERAR REPORTE REAL usando el dispatcher
+            logger.info(f"🟠 [REPORT-3/5] ⏳ Inicializando ReportDispatcher")
             try:
                 dispatcher = ReportDispatcher(user=self.user)
+                logger.info(f"🟠 [REPORT-3/5] ✅ Dispatcher inicializado")
+                
+                logger.info(f"🟠 [REPORT-3/5] ⏳ Llamando a dispatcher.dispatch() - PUNTO CRÍTICO")
+                logger.info(f"🟠 [REPORT-3/5]    Report type: {report_type}")
+                logger.info(f"🟠 [REPORT-3/5]    Params keys: {list(params.keys())}")
+                
                 real_data = dispatcher.dispatch(report_type, params)
                 
-                logger.info(f"✅ Reporte '{report_type}' generado exitosamente")
+                logger.info(f"🟠 [REPORT-3/5] ✅ dispatcher.dispatch() COMPLETADO")
+                logger.info(f"🟠 [REPORT-3/5]    Datos generados. Keys: {list(real_data.keys()) if isinstance(real_data, dict) else type(real_data)}")
+                
+                logger.info(f"🟠 [REPORT-4/5] ✅ Reporte '{report_type}' generado exitosamente")
                 
             except Exception as e:
-                logger.error(f"❌ Error al generar reporte con dispatcher: {e}", exc_info=True)
+                logger.error(f"🟠 [REPORT-ERROR] ❌ Error al generar reporte con dispatcher: {type(e).__name__}: {e}")
+                logger.error(f"🟠 [REPORT-ERROR] Stacktrace:", exc_info=True)
+                logger.error(f"🟠 [REPORT-ERROR] Stacktrace:", exc_info=True)
                 # Si falla el generador, retornamos un error descriptivo
                 return {
                     'success': False,
@@ -171,6 +212,7 @@ class VoiceCommandProcessor:
                 }
             
             # Combinar metadata del parser + datos reales del generador
+            logger.info(f"🟠 [REPORT-5/5] Construyendo response final")
             result_data = {
                 'report_info': {
                     'name': parsed['report_name'],
@@ -203,6 +245,9 @@ class VoiceCommandProcessor:
                     f"El formato '{params['original_format']}' no está disponible para este reporte. Se usará '{parsed['format']}' en su lugar."
                 ]
             
+            logger.info(f"🟠 [REPORT-5/5] ✅ Response construida correctamente")
+            logger.info(f"🟠 [REPORT-5/5] ==================== process_report_command COMPLETADO ====================")
+            
             return {
                 'success': True,
                 'command_type': 'reporte',
@@ -218,7 +263,8 @@ class VoiceCommandProcessor:
             }
             
         except Exception as e:
-            logger.error(f"❌ Error al procesar comando de reporte: {e}", exc_info=True)
+            logger.error(f"🟠 [REPORT-ERROR] ❌ EXCEPCIÓN en process_report_command: {type(e).__name__}: {e}")
+            logger.error(f"🟠 [REPORT-ERROR] Stacktrace:", exc_info=True)
             return {
                 'success': False,
                 'command_type': 'reporte',

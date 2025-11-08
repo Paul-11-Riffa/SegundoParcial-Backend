@@ -20,6 +20,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     lookup_field = 'slug'
+    pagination_class = None  # ✅ Deshabilitar paginación
     
     def get_permissions(self):
         """
@@ -71,6 +72,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     ordering_fields = ['price', 'created_at', 'name', 'stock']
     ordering = ['-created_at']  # Orden por defecto
+    pagination_class = None  # ✅ Deshabilitar paginación para admin
     
     def get_permissions(self):
         """
