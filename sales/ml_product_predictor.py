@@ -290,7 +290,7 @@ class ProductSalesPredictor:
         if category_id:
             query = query.filter(category_id=category_id)
         
-        products = query.distinct()[:50]  # Limitar a top 50 para no sobrecargar
+        products = query.distinct()  # Sin límite - retorna TODOS los productos
         
         rankings = []
         

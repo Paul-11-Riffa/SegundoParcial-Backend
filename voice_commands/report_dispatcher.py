@@ -59,11 +59,16 @@ class ReportDispatcher:
         Raises:
             ValueError: Si el tipo de reporte no es soportado
         """
-        logger.info(f"Despachando reporte tipo '{report_type}' con params: {params}")
+        logger.info(f"🟡 [DISPATCH-1/6] ==================== ReportDispatcher.dispatch INICIADO ====================")
+        logger.info(f"🟡 [DISPATCH-1/6] Report type: {report_type}")
+        logger.info(f"🟡 [DISPATCH-1/6] Params keys: {list(params.keys())}")
         
         try:
             # Convertir parámetros al formato del generador
+            logger.info(f"🟡 [DISPATCH-2/6] Convirtiendo parámetros...")
             gen_params = self._convert_params(params)
+            logger.info(f"🟡 [DISPATCH-2/6] ✅ Parámetros convertidos")
+            logger.info(f"🟡 [DISPATCH-2/6]    Gen params keys: {list(gen_params.keys())}")
             
             # === REPORTES BÁSICOS DE VENTAS ===
             if report_type in [
@@ -73,42 +78,86 @@ class ReportDispatcher:
                 'ventas_por_categoria', 
                 'ventas_por_fecha'
             ]:
-                return self._generate_sales_report(report_type, gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando reporte básico de ventas: {report_type}")
+                result = self._generate_sales_report(report_type, gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Reporte básico generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             # === REPORTES AVANZADOS ===
             elif report_type == 'analisis_rfm':
-                return self._generate_rfm_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando análisis RFM")
+                result = self._generate_rfm_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Análisis RFM generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'analisis_abc':
-                return self._generate_abc_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando análisis ABC")
+                result = self._generate_abc_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Análisis ABC generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'comparativo_temporal':
-                return self._generate_comparative_report(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando comparativo temporal")
+                result = self._generate_comparative_report(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Comparativo generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'dashboard_ejecutivo':
-                return self._generate_executive_dashboard(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando dashboard ejecutivo")
+                result = self._generate_executive_dashboard(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Dashboard generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'analisis_inventario':
-                return self._generate_inventory_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando análisis de inventario")
+                result = self._generate_inventory_analysis(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Inventario generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             # === REPORTES ML ===
             elif report_type == 'prediccion_ventas':
-                return self._generate_sales_prediction(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando predicción de ventas (ML)")
+                result = self._generate_sales_prediction(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Predicción generada")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'prediccion_producto':
-                return self._generate_product_prediction(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando predicción de producto (ML)")
+                result = self._generate_product_prediction(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Predicción producto generada")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'recomendaciones':
-                return self._generate_recommendations(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando recomendaciones (ML)")
+                result = self._generate_recommendations(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Recomendaciones generadas")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             elif report_type == 'dashboard_ml':
-                return self._generate_ml_dashboard(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ⏳ Generando dashboard ML")
+                result = self._generate_ml_dashboard(gen_params)
+                logger.info(f"🟡 [DISPATCH-3/6] ✅ Dashboard ML generado")
+                logger.info(f"🟡 [DISPATCH-6/6] ==================== ReportDispatcher.dispatch COMPLETADO ====================")
+                return result
             
             else:
+                logger.error(f"🟡 [DISPATCH-ERROR] ❌ Tipo de reporte NO SOPORTADO: '{report_type}'")
                 raise ValueError(f"Tipo de reporte no soportado: '{report_type}'")
                 
         except Exception as e:
-            logger.error(f"Error al generar reporte '{report_type}': {e}", exc_info=True)
+            logger.error(f"🟡 [DISPATCH-ERROR] ❌ EXCEPCIÓN en ReportDispatcher.dispatch: {type(e).__name__}: {e}")
+            logger.error(f"🟡 [DISPATCH-ERROR] Report type: {report_type}")
+            logger.error(f"🟡 [DISPATCH-ERROR] Stacktrace:", exc_info=True)
             raise
     
     # ========== REPORTES BÁSICOS DE VENTAS ==========
@@ -117,6 +166,8 @@ class ReportDispatcher:
         """
         Genera reportes básicos de ventas usando ReportGenerator.
         """
+        logger.info(f"🔶 [SALES-1/4] _generate_sales_report iniciado para: {report_type}")
+        
         # Mapear tipo del parser → configuración del generador
         type_mapping = {
             'ventas_basico': {
@@ -145,9 +196,23 @@ class ReportDispatcher:
         config = type_mapping.get(report_type, {})
         params.update(config)
         
+        logger.info(f"🔶 [SALES-2/4] Configuración aplicada. Report type en params: {params.get('report_type')}")
+        
         # Generar reporte
-        generator = ReportGenerator(params)
-        return generator.generate()
+        logger.info(f"🔶 [SALES-3/4] ⏳ Inicializando ReportGenerator")
+        try:
+            generator = ReportGenerator(params)
+            logger.info(f"🔶 [SALES-3/4] ✅ ReportGenerator inicializado")
+            
+            logger.info(f"🔶 [SALES-4/4] ⏳ Llamando a generator.generate() - PUNTO CRÍTICO")
+            result = generator.generate()
+            logger.info(f"🔶 [SALES-4/4] ✅ generator.generate() COMPLETADO")
+            
+            return result
+        except Exception as e:
+            logger.error(f"🔶 [SALES-ERROR] ❌ Error en ReportGenerator: {type(e).__name__}: {e}")
+            logger.error(f"🔶 [SALES-ERROR] Stacktrace:", exc_info=True)
+            raise
     
     # ========== REPORTES AVANZADOS ==========
     

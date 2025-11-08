@@ -79,15 +79,16 @@ class ReportGenerator:
     def _sales_by_product(self):
         """
         Reporte de ventas agrupado por producto.
+        ✅ Retorna TODOS los registros sin límites
         """
         self.report_data['title'] = 'Reporte de Ventas por Producto'
         self.report_data['subtitle'] = self._get_date_range_text()
         self.report_data['headers'] = ['Producto', 'Categoría', 'Cantidad Vendida', 'Ingresos Totales', 'Precio Promedio']
         
-        # Obtener items de órdenes completadas en el rango de fechas
+        # Obtener TODOS los items de órdenes completadas en el rango de fechas
         order_items = OrderItem.objects.filter(
             order__in=self._get_base_orders_queryset()
-        ).select_related('product', 'product__category')
+        ).select_related('product', 'product__category')  # Sin límite - retorna TODOS
         
         # Agrupar por producto
         product_stats = {}
@@ -291,19 +292,21 @@ class ReportGenerator:
     def _sales_general(self):
         """
         Reporte general de ventas (sin agrupación específica).
+        ✅ Retorna TODAS las órdenes sin límites
         """
         self.report_data['title'] = 'Reporte General de Ventas'
         self.report_data['subtitle'] = self._get_date_range_text()
         self.report_data['headers'] = ['ID Orden', 'Cliente', 'Fecha', 'Productos', 'Total']
         
-        orders = self._get_base_orders_queryset().order_by('-updated_at')
+        # Obtener TODAS las órdenes con prefetch para evitar N+1 queries
+        orders = self._get_base_orders_queryset().select_related('customer').prefetch_related('items').order_by('-updated_at')
         
         for order in orders:
             self.report_data['rows'].append([
                 f"#{order.id}",
                 order.customer.username,
                 order.updated_at.strftime('%d/%m/%Y %H:%M'),
-                order.items.count(),
+                order.items.count(),  # Ahora usa prefetch, no hace query
                 f"${order.total_price:.2f}"
             ])
         
