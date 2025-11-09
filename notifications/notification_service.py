@@ -277,26 +277,40 @@ class NotificationService:
         """
         try:
             notification = Notification.objects.get(id=notification_id, user=user)
+            
+            # Log para debugging
+            logger.info(f"Marcando notificación {notification_id} como leída. Estado actual: {notification.status}")
+            
             notification.mark_as_read()
+            
+            # Verificar que se guardó correctamente
+            notification.refresh_from_db()
+            logger.info(f"Notificación {notification_id} actualizada. Nuevo estado: {notification.status}")
+            
             return True
         except Notification.DoesNotExist:
+            logger.warning(f"Intento de marcar notificación inexistente {notification_id} para usuario {user.username}")
             return False
 
     @staticmethod
     def mark_all_as_read(user: User) -> int:
         """
-        Marca todas las notificaciones de un usuario como leídas.
+        Marca todas las notificaciones no leídas de un usuario como leídas.
         
         Returns:
             Número de notificaciones marcadas
         """
+        # Marcar todas las notificaciones que no estén en estado READ
         count = Notification.objects.filter(
-            user=user,
-            status=Notification.Status.SENT
+            user=user
+        ).exclude(
+            status=Notification.Status.READ
         ).update(
             status=Notification.Status.READ,
             read_at=timezone.now()
         )
+        
+        logger.info(f"Marcadas {count} notificaciones como leídas para usuario {user.username}")
         
         logger.info(f"Marcadas {count} notificaciones como leídas para {user.username}")
         return count

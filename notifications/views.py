@@ -151,10 +151,24 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         success = NotificationService.mark_notification_as_read(pk, request.user)
         
         if success:
-            return Response(
-                {'message': 'Notificación marcada como leída'},
-                status=status.HTTP_200_OK
-            )
+            # Obtener la notificación actualizada para confirmar el cambio
+            try:
+                notification = Notification.objects.get(id=pk, user=request.user)
+                return Response(
+                    {
+                        'status': 'success',
+                        'message': 'Notificación marcada como leída',
+                        'notification_id': notification.id,
+                        'is_read': notification.status == Notification.Status.READ,
+                        'read_at': notification.read_at
+                    },
+                    status=status.HTTP_200_OK
+                )
+            except Notification.DoesNotExist:
+                return Response(
+                    {'message': 'Notificación marcada como leída'},
+                    status=status.HTTP_200_OK
+                )
         else:
             return Response(
                 {'error': 'Notificación no encontrada'},
