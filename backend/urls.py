@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/sales/', include('sales.urls')),  # Carritos, órdenes, ventas, reportes, ML y predicciones
     path('api/orders/', include('sales.urls')),  # Alias para compatibilidad con frontend
     path('api/notifications/', include('notifications.urls')),
+    path('notifications/', include('notifications.urls')),  # Sin /api/ para compatibilidad con frontend
     path('api/', include('voice_commands.urls')),
 ]
 

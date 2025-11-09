@@ -97,11 +97,13 @@ class Notification(models.Model):
         self.save()
 
     def mark_as_read(self):
-        """Marca la notificación como leída"""
-        if self.status == self.Status.SENT:
-            self.status = self.Status.READ
-            self.read_at = timezone.now()
-            self.save()
+        """
+        Marca la notificación como leída.
+        Puede marcarse como leída independientemente del estado de envío.
+        """
+        self.status = self.Status.READ
+        self.read_at = timezone.now()
+        self.save()
 
 
 class NotificationPreference(models.Model):
