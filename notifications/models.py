@@ -103,7 +103,9 @@ class Notification(models.Model):
         """
         self.status = self.Status.READ
         self.read_at = timezone.now()
-        self.save()
+        self.save() 
+
+    
 
 
 class NotificationPreference(models.Model):

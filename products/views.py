@@ -5,8 +5,8 @@ from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer
+from .models import Category, Product, ProductImage
+from .serializers import CategorySerializer, ProductSerializer, ProductImageSerializer
 from .filters import ProductFilter
 from api.permissions import IsAdminUser
 import os
@@ -73,6 +73,21 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['price', 'created_at', 'name', 'stock']
     ordering = ['-created_at']  # Orden por defecto
     pagination_class = None  # ✅ Deshabilitar paginación para admin
+    
+    def get_queryset(self):
+        """
+        Filtrar productos según el usuario:
+        - Admins: Ven todos los productos (activos e inactivos)
+        - Usuarios normales: Solo ven productos activos
+        """
+        queryset = super().get_queryset()
+        
+        # Si es admin, mostrar todos los productos
+        if self.request.user and self.request.user.is_staff:
+            return queryset
+        
+        # Para usuarios normales y anónimos, solo mostrar productos activos
+        return queryset.filter(is_active=True)
     
     def get_permissions(self):
         """
@@ -173,6 +188,44 @@ class ProductViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def toggle_active(self, request, pk=None):
+        """
+        Endpoint para activar/desactivar un producto rápidamente.
+        
+        POST /api/shop/products/{id}/toggle_active/
+        
+        Body (opcional):
+        {
+            "is_active": true  // o false para forzar un estado específico
+        }
+        
+        Si no se envía is_active, se alterna (toggle) el estado actual.
+        """
+        product = self.get_object()
+        
+        # Si se envía is_active en el body, usar ese valor
+        if 'is_active' in request.data:
+            new_state = request.data.get('is_active')
+            product.is_active = new_state
+        else:
+            # Si no, alternar (toggle) el estado actual
+            product.is_active = not product.is_active
+        
+        product.save()
+        
+        status_text = "activado" if product.is_active else "desactivado"
+        
+        return Response({
+            'success': True,
+            'message': f'Producto "{product.name}" {status_text} correctamente',
+            'product': {
+                'id': product.id,
+                'name': product.name,
+                'is_active': product.is_active
+            }
+        }, status=status.HTTP_200_OK)
+    
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
     def clean_broken_images(self, request):
         """
@@ -202,3 +255,282 @@ class ProductViewSet(viewsets.ModelViewSet):
             'message': f'Limpieza completada. {cleaned_count} imagen(es) rota(s) eliminada(s).',
             'cleaned_count': cleaned_count
         }, status=status.HTTP_200_OK)
+
+
+class ProductImageViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para gestionar imágenes de productos (múltiples imágenes).
+    
+    PERMISOS:
+    - GET (Lectura): Acceso público
+    - POST/PUT/PATCH/DELETE (Escritura): Solo administradores
+    
+    Endpoints:
+    - GET /api/shop/product-images/ - Listar todas las imágenes
+    - GET /api/shop/product-images/{id}/ - Ver detalle de una imagen
+    - POST /api/shop/product-images/ - Crear nueva imagen (admin)
+    - PUT/PATCH /api/shop/product-images/{id}/ - Actualizar imagen (admin)
+    - DELETE /api/shop/product-images/{id}/ - Eliminar imagen (admin)
+    - POST /api/shop/product-images/bulk_upload/ - Subir múltiples imágenes (admin)
+    - POST /api/shop/product-images/{id}/set_primary/ - Marcar como principal (admin)
+    """
+    queryset = ProductImage.objects.select_related('product').all()
+    serializer_class = ProductImageSerializer
+    pagination_class = None
+    
+    def get_permissions(self):
+        """
+        Permisos dinámicos:
+        - Lectura (GET, HEAD, OPTIONS): Público
+        - Escritura (POST, PUT, PATCH, DELETE): Solo admins
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [permissions.AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Permite filtrar imágenes por producto usando query param.
+        Ejemplo: /api/shop/product-images/?product=1
+        """
+        queryset = super().get_queryset()
+        product_id = self.request.query_params.get('product', None)
+        
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+        
+        return queryset.order_by('order')
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
+    def bulk_upload(self, request):
+        """
+        Endpoint para subir múltiples imágenes a un producto de una vez.
+        
+        POST /api/shop/product-images/bulk_upload/
+        
+        FormData:
+        - product: ID del producto (requerido)
+        - images: Array de archivos de imagen (requerido)
+        - alt_text: Texto alternativo (opcional)
+        - start_order: Orden inicial (opcional, default: 0)
+        
+        Ejemplo con JavaScript:
+        ```javascript
+        const formData = new FormData();
+        formData.append('product', productId);
+        files.forEach(file => {
+            formData.append('images', file);
+        });
+        formData.append('start_order', 0);
+        
+        fetch('/api/shop/product-images/bulk_upload/', {
+            method: 'POST',
+            headers: { 'Authorization': 'Token ...' },
+            body: formData
+        });
+        ```
+        """
+        # Aceptar tanto "product" como "product_id" para flexibilidad
+        product_id = request.data.get('product') or request.data.get('product_id')
+        
+        if not product_id:
+            return Response(
+                {'error': 'El campo "product" o "product_id" es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Producto no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Obtener imágenes del request
+        images = request.FILES.getlist('images')
+        
+        if not images:
+            return Response(
+                {'error': 'No se proporcionaron imágenes. Use el campo "images"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Obtener configuración opcional
+        alt_text = request.data.get('alt_text', '')
+        start_order = int(request.data.get('start_order', 0))
+        
+        created_images = []
+        errors = []
+        
+        for idx, image_file in enumerate(images):
+            try:
+                # Validar tamaño
+                if image_file.size > 5 * 1024 * 1024:
+                    errors.append(f'{image_file.name}: Imagen supera 5MB')
+                    continue
+                
+                # Validar extensión
+                valid_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+                ext = os.path.splitext(image_file.name)[1].lower()
+                if ext not in valid_extensions:
+                    errors.append(f'{image_file.name}: Formato no válido')
+                    continue
+                
+                # Crear ProductImage
+                product_image = ProductImage.objects.create(
+                    product=product,
+                    image=image_file,
+                    order=start_order + idx,
+                    alt_text=alt_text or f'{product.name} - Imagen {idx + 1}'
+                )
+                
+                created_images.append(product_image)
+            
+            except Exception as e:
+                errors.append(f'{image_file.name}: {str(e)}')
+        
+        # Serializar imágenes creadas
+        serializer = self.get_serializer(created_images, many=True)
+        
+        return Response({
+            'success': True,
+            'message': f'{len(created_images)} imagen(es) subida(s) correctamente',
+            'created_count': len(created_images),
+            'error_count': len(errors),
+            'images': serializer.data,
+            'errors': errors if errors else None
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def set_primary(self, request, pk=None):
+        """
+        Marca una imagen como principal del producto.
+        
+        POST /api/shop/product-images/{id}/set_primary/
+        
+        Automáticamente desmarca las demás imágenes del mismo producto.
+        """
+        product_image = self.get_object()
+        
+        # Desmarcar todas las imágenes del producto como principales
+        ProductImage.objects.filter(
+            product=product_image.product,
+            is_primary=True
+        ).update(is_primary=False)
+        
+        # Marcar esta como principal
+        product_image.is_primary = True
+        product_image.save()
+        
+        serializer = self.get_serializer(product_image)
+        return Response({
+            'message': 'Imagen marcada como principal',
+            'image': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
+    def reorder(self, request):
+        """
+        Reordena múltiples imágenes de un producto.
+        
+        POST /api/shop/product-images/reorder/
+        
+        Body (Opción 1 - con product):
+        {
+            "product": 1,
+            "image_orders": [
+                {"id": 5, "order": 0},
+                {"id": 3, "order": 1}
+            ]
+        }
+        
+        Body (Opción 2 - sin product, solo imágenes):
+        {
+            "image_orders": [
+                {"id": 5, "order": 0},
+                {"id": 3, "order": 1}
+            ]
+        }
+        
+        Body (Opción 3 - reorder_data para compatibilidad):
+        {
+            "reorder_data": [
+                {"id": 5, "order": 0},
+                {"id": 3, "order": 1}
+            ]
+        }
+        """
+        # Aceptar múltiples formatos para flexibilidad
+        product_id = request.data.get('product') or request.data.get('product_id')
+        image_orders = (
+            request.data.get('image_orders') or 
+            request.data.get('reorder_data') or 
+            []
+        )
+        
+        # Si no hay product_id pero hay image_orders, obtenerlo de la primera imagen
+        if not product_id and image_orders and len(image_orders) > 0:
+            first_image_id = image_orders[0].get('id')
+            if first_image_id:
+                try:
+                    first_image = ProductImage.objects.get(id=first_image_id)
+                    product_id = first_image.product.id
+                except ProductImage.DoesNotExist:
+                    pass
+        
+        if not image_orders:
+            return Response(
+                {'error': 'El campo "image_orders" o "reorder_data" es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que product_id sea válido si se proporcionó
+        if product_id:
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return Response(
+                    {'error': 'Producto no encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        updated_count = 0
+        errors = []
+        
+        for item in image_orders:
+            image_id = item.get('id')
+            new_order = item.get('order')
+            
+            if image_id is not None and new_order is not None:
+                try:
+                    # Si tenemos product_id, verificar que la imagen pertenezca al producto
+                    if product_id:
+                        product_image = ProductImage.objects.get(
+                            id=image_id,
+                            product_id=product_id
+                        )
+                    else:
+                        # Si no, solo buscar por ID
+                        product_image = ProductImage.objects.get(id=image_id)
+                    
+                    product_image.order = new_order
+                    product_image.save()
+                    updated_count += 1
+                except ProductImage.DoesNotExist:
+                    errors.append(f'Imagen {image_id} no encontrada')
+                except Exception as e:
+                    errors.append(f'Error con imagen {image_id}: {str(e)}')
+        
+        response_data = {
+            'success': True,
+            'message': f'{updated_count} imagen(es) reordenada(s) correctamente',
+            'updated_count': updated_count
+        }
+        
+        if errors:
+            response_data['errors'] = errors
+        
+        return Response(response_data)

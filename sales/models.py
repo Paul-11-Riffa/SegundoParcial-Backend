@@ -28,7 +28,9 @@ class Order(models.Model):
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='order_items')
+    # ✅ PROTECT: No permite eliminar producto si tiene ventas
+    # Si intentas borrar un producto con ventas, Django lanza error ProtectedError
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2) # Precio al momento de la compra
 

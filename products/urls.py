@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, ProductViewSet
+from .views import CategoryViewSet, ProductViewSet, ProductImageViewSet
 
 # Importar vistas de recomendaciones desde sales app
 from sales.views_recommendations import (
@@ -14,6 +14,7 @@ from sales.views_recommendations import (
 router = DefaultRouter()
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'products', ProductViewSet, basename='product')
+router.register(r'product-images', ProductImageViewSet, basename='product-image')  # ✅ NUEVO
 
 urlpatterns = [
     path('', include(router.urls)),

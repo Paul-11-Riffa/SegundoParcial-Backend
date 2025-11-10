@@ -30,6 +30,12 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     stock = models.PositiveIntegerField(default=0)
     image = models.ImageField(upload_to='products/', blank=True, null=True)
+    
+    # ✅ NUEVO: Campo para "desactivar" productos sin eliminarlos
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Desmarcar para ocultar el producto sin eliminarlo. Protege el historial de ventas."
+    )
 
     # Campos de fecha automáticos
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,3 +112,145 @@ class Product(models.Model):
             except Exception:
                 pass
         return False
+    
+    @property
+    def primary_image(self):
+        """
+        Devuelve la imagen principal del producto (desde ProductImage).
+        Si no hay, devuelve la imagen legacy del campo 'image'.
+        """
+        # Intentar obtener imagen marcada como principal
+        primary = self.images.filter(is_primary=True).first()
+        if primary:
+            return primary
+        
+        # Si no hay principal, devolver la primera por orden
+        first_image = self.images.order_by('order').first()
+        if first_image:
+            return first_image
+        
+        # Si no hay imágenes en ProductImage, usar el campo legacy 'image'
+        return None
+    
+    @property
+    def all_images(self):
+        """
+        Devuelve todas las imágenes del producto ordenadas.
+        Incluye la imagen legacy si existe y no hay imágenes nuevas.
+        """
+        product_images = self.images.order_by('order').all()
+        if product_images.exists():
+            return product_images
+        
+        # Si no hay imágenes nuevas pero existe la imagen legacy
+        if self.image:
+            # Retornar lista vacía, la imagen legacy se maneja por separado
+            return []
+        
+        return []
+
+
+class ProductImage(models.Model):
+    """
+    Modelo para gestionar múltiples imágenes por producto.
+    Permite tener varias imágenes ordenadas y marcar una como principal.
+    """
+    product = models.ForeignKey(
+        Product,
+        related_name='images',
+        on_delete=models.CASCADE,
+        help_text="Producto al que pertenece la imagen"
+    )
+    image = models.ImageField(
+        upload_to='products/',
+        help_text="Archivo de imagen"
+    )
+    order = models.IntegerField(
+        default=0,
+        help_text="Orden de visualización (menor número = primera)"
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Marca esta imagen como la principal (solo una por producto)"
+    )
+    alt_text = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Texto alternativo para accesibilidad"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'product_images'
+        ordering = ['order', 'id']
+        verbose_name = 'Imagen de Producto'
+        verbose_name_plural = 'Imágenes de Productos'
+        indexes = [
+            models.Index(fields=['product', 'order']),
+            models.Index(fields=['product', 'is_primary']),
+        ]
+    
+    def __str__(self):
+        primary_text = " (Principal)" if self.is_primary else ""
+        return f"{self.product.name} - Imagen {self.order}{primary_text}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save para asegurar que solo hay una imagen principal por producto.
+        """
+        if self.is_primary:
+            # Si esta imagen se marca como principal, quitar la marca de las demás
+            ProductImage.objects.filter(
+                product=self.product,
+                is_primary=True
+            ).exclude(id=self.id).update(is_primary=False)
+        
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """
+        Override delete para eliminar el archivo físico.
+        """
+        # Eliminar archivo físico
+        if self.image:
+            try:
+                if os.path.isfile(self.image.path):
+                    os.remove(self.image.path)
+            except Exception:
+                pass
+        
+        super().delete(*args, **kwargs)
+    
+    @property
+    def image_url(self):
+        """
+        Devuelve la URL de la imagen si existe físicamente.
+        """
+        if self.image:
+            try:
+                if os.path.isfile(self.image.path):
+                    return self.image.url
+            except (ValueError, AttributeError):
+                pass
+        return None
+    
+    def clean(self):
+        """
+        Validaciones personalizadas.
+        """
+        if self.order < 0:
+            raise ValidationError({'order': 'El orden no puede ser negativo.'})
+        
+        # Validar tamaño de archivo (5MB máximo)
+        if self.image and hasattr(self.image, 'size'):
+            if self.image.size > 5 * 1024 * 1024:
+                raise ValidationError({'image': 'La imagen no debe superar 5MB.'})
+        
+        # Validar extensión
+        if self.image and hasattr(self.image, 'name'):
+            valid_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+            ext = os.path.splitext(self.image.name)[1].lower()
+            if ext not in valid_extensions:
+                raise ValidationError({
+                    'image': f'Formato de imagen no válido. Use: {", ".join(valid_extensions)}'
+                })

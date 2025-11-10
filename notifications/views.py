@@ -269,13 +269,15 @@ class NotificationPreferenceViewSet(viewsets.ModelViewSet):
         """Filtrar preferencias por usuario actual"""
         return NotificationPreference.objects.filter(user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def my_preferences(self, request):
         """
         Obtiene las preferencias del usuario actual.
         Si no existen, las crea con valores por defecto.
         
         GET /api/notifications/preferences/my_preferences/
+        
+        REQUIERE AUTENTICACIÓN: Debes enviar el header Authorization: Token <tu_token>
         """
         preferences, created = NotificationPreference.objects.get_or_create(
             user=request.user
