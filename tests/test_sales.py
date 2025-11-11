@@ -356,3 +356,156 @@ class StockManagementTestCase(TestCase):
         # Verificar que el stock disminuyó
         product_updated = Product.objects.get(id=self.product.id)
         self.assertEqual(product_updated.stock, 7)  # 10 - 3 = 7
+
+
+class ReceiptPDFTestCase(TestCase):
+    """Tests para la descarga de comprobantes PDF"""
+    
+    def setUp(self):
+        """Configuración inicial"""
+        self.client = APIClient()
+        
+        # Crear dos usuarios: un cliente normal y un administrador
+        self.normal_user = User.objects.create_user(
+            username='Paul10',
+            email='paul@example.com',
+            password='testpass123',
+            first_name='Paul',
+            last_name='Riffarachi'
+        )
+        
+        self.other_user = User.objects.create_user(
+            username='OtherUser',
+            email='other@example.com',
+            password='testpass123'
+        )
+        
+        self.admin_user = User.objects.create_user(
+            username='admin',
+            email='admin@example.com',
+            password='adminpass123',
+            is_staff=True,
+            is_superuser=True
+        )
+        
+        # Crear categoría y producto
+        self.category = Category.objects.create(
+            name='Electronics',
+            slug='electronics'
+        )
+        
+        self.product = Product.objects.create(
+            category=self.category,
+            name='Laptop',
+            price=Decimal('515.00'),  # ✅ Solo 2 decimales
+            stock=10
+        )
+        
+        # Crear orden completada para el usuario normal
+        self.completed_order = Order.objects.create(
+            customer=self.normal_user,
+            status='COMPLETED',
+            total_price=Decimal('1029.98')
+        )
+        
+        OrderItem.objects.create(
+            order=self.completed_order,
+            product=self.product,
+            quantity=2,
+            price=self.product.price
+        )
+        
+        # Crear orden pendiente (no debería generar PDF)
+        self.pending_order = Order.objects.create(
+            customer=self.normal_user,
+            status='PENDING',
+            total_price=Decimal('100.00')
+        )
+    
+    def test_owner_can_download_receipt(self):
+        """Test: El propietario de la orden puede descargar su comprobante"""
+        # Login como usuario propietario
+        login_response = self.client.post('/api/login/', {
+            'username': 'Paul10',
+            'password': 'testpass123'
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
+        
+        # Intentar descargar comprobante
+        response = self.client.get(f'/api/orders/sales-history/{self.completed_order.id}/receipt/')
+        
+        # Verificar que el PDF se descargó correctamente
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertIn(f'receipt_order_{self.completed_order.id}.pdf', response['Content-Disposition'])
+    
+    def test_non_owner_cannot_download_receipt(self):
+        """Test: Un usuario NO propietario NO puede descargar el comprobante de otro usuario"""
+        # Login como otro usuario
+        login_response = self.client.post('/api/login/', {
+            'username': 'OtherUser',
+            'password': 'testpass123'
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
+        
+        # Intentar descargar comprobante de otro usuario
+        response = self.client.get(f'/api/orders/sales-history/{self.completed_order.id}/receipt/')
+        
+        # Debería devolver 404 (no 403, para no revelar que la orden existe)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.data)
+    
+    def test_admin_can_download_any_receipt(self):
+        """Test: Un administrador puede descargar cualquier comprobante"""
+        # Login como administrador
+        login_response = self.client.post('/api/login/', {
+            'username': 'admin',
+            'password': 'adminpass123'
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
+        
+        # Intentar descargar comprobante de cualquier usuario
+        response = self.client.get(f'/api/orders/sales-history/{self.completed_order.id}/receipt/')
+        
+        # Verificar que el PDF se descargó correctamente
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+    
+    def test_pending_order_returns_404(self):
+        """Test: Una orden no completada devuelve 404"""
+        # Login como usuario propietario
+        login_response = self.client.post('/api/login/', {
+            'username': 'Paul10',
+            'password': 'testpass123'
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
+        
+        # Intentar descargar comprobante de orden pendiente
+        response = self.client.get(f'/api/orders/sales-history/{self.pending_order.id}/receipt/')
+        
+        # Debería devolver 404
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_unauthenticated_user_cannot_download_receipt(self):
+        """Test: Un usuario no autenticado no puede descargar comprobantes"""
+        # No hacer login
+        response = self.client.get(f'/api/orders/sales-history/{self.completed_order.id}/receipt/')
+        
+        # Debería devolver 401 Unauthorized
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_nonexistent_order_returns_404(self):
+        """Test: Una orden inexistente devuelve 404"""
+        # Login como usuario normal
+        login_response = self.client.post('/api/login/', {
+            'username': 'Paul10',
+            'password': 'testpass123'
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_response.data["token"]}')
+        
+        # Intentar descargar comprobante de orden inexistente
+        response = self.client.get('/api/orders/sales-history/99999/receipt/')
+        
+        # Debería devolver 404
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

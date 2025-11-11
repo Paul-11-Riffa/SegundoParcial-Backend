@@ -89,7 +89,7 @@ class FirebaseService:
             message_id si se envió correctamente, None si falló
         """
         if not self.is_initialized():
-            logger.warning("Firebase no está inicializado. No se puede enviar la notificación.")
+            logger.debug("Firebase no está inicializado. Saltando notificación.")
             return None
 
         try:
@@ -169,7 +169,7 @@ class FirebaseService:
             Dict con success_count, failure_count y tokens_to_remove
         """
         if not self.is_initialized():
-            logger.warning("Firebase no está inicializado. No se pueden enviar notificaciones.")
+            logger.debug("Firebase no está inicializado. Saltando notificaciones multicast.")
             return {'success_count': 0, 'failure_count': len(tokens), 'tokens_to_remove': []}
 
         if not tokens:
@@ -235,7 +235,12 @@ class FirebaseService:
             }
 
         except Exception as e:
-            logger.error(f"Error al enviar notificación multicast: {str(e)}")
+            # Silenciar errores de Firebase si no está configurado correctamente
+            error_msg = str(e)
+            if '404' in error_msg or 'batch' in error_msg:
+                logger.debug(f"Firebase no configurado o servicio no disponible: {error_msg[:100]}")
+            else:
+                logger.error(f"Error al enviar notificación multicast: {error_msg[:200]}")
             return {
                 'success_count': 0,
                 'failure_count': len(tokens),

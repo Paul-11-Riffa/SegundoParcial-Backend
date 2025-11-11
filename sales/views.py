@@ -33,6 +33,13 @@ class CartView(views.APIView):
         
         if not cart:
             cart = Order.objects.create(customer=request.user, status='PENDING', total_price=0.00)
+        else:
+            # Recalcular el total por si hubo cambios
+            new_total = sum(item.price * item.quantity for item in cart.items.all())
+            if cart.total_price != new_total:
+                cart.total_price = new_total
+                cart.save()
+        
         serializer = OrderSerializer(cart)
         return response.Response(serializer.data)
 
@@ -52,7 +59,16 @@ class CartView(views.APIView):
         except Product.DoesNotExist:
             return response.Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        cart, _ = Order.objects.get_or_create(customer=request.user, status='PENDING')
+        # Obtener o crear carrito, manejando duplicados
+        try:
+            cart = Order.objects.get(customer=request.user, status='PENDING')
+        except Order.MultipleObjectsReturned:
+            # Si hay múltiples carritos, usar el más reciente y eliminar los demás
+            carts = Order.objects.filter(customer=request.user, status='PENDING').order_by('-created_at')
+            cart = carts.first()
+            carts.exclude(id=cart.id).delete()
+        except Order.DoesNotExist:
+            cart = Order.objects.create(customer=request.user, status='PENDING')
 
         # Si el producto ya está en el carrito, actualiza la cantidad. Si no, lo crea.
         order_item, created = OrderItem.objects.get_or_create(order=cart, product=product, defaults={'price': product.price})
@@ -425,17 +441,32 @@ class SalesHistoryDetailView(generics.RetrieveAPIView):
 
 # --- VISTA PARA GENERAR COMPROBANTES EN PDF ---
 class GenerateOrderReceiptPDF(views.APIView):
-    permission_classes = [IsAdminUser]
+    """
+    Permite a un usuario autenticado descargar el comprobante PDF de su propia orden completada.
+    Los administradores pueden descargar el comprobante de cualquier orden.
+    """
+    permission_classes = [permissions.IsAuthenticated]  # ✅ Solo requiere autenticación
 
     def get(self, request, order_id):
         try:
             # 1. Buscamos la orden completada
             # ✅ OPTIMIZADO: prefetch_related para traer items y productos
-            order = Order.objects.select_related('customer').prefetch_related(
-                'items__product__category'
-            ).get(id=order_id, status='COMPLETED')
+            # ✅ SEGURIDAD: Validamos que la orden pertenezca al usuario actual (a menos que sea admin)
+            if request.user.is_staff:
+                # Los administradores pueden ver cualquier orden
+                order = Order.objects.select_related('customer').prefetch_related(
+                    'items__product__category'
+                ).get(id=order_id, status='COMPLETED')
+            else:
+                # Los usuarios normales solo pueden ver sus propias órdenes
+                order = Order.objects.select_related('customer').prefetch_related(
+                    'items__product__category'
+                ).get(id=order_id, status='COMPLETED', customer=request.user)
         except Order.DoesNotExist:
-            return response.Response({'error': 'Completed order not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return response.Response(
+                {'error': 'Completed order not found or you do not have permission to access it.'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         # 2. Creamos una respuesta HTTP de tipo PDF
         response_pdf = HttpResponse(content_type='application/pdf')
