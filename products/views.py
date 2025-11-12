@@ -93,10 +93,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         """
         Permisos dinámicos:
         - Lectura (GET, HEAD, OPTIONS): Público
+        - Búsqueda por voz: Usuarios autenticados
         - Escritura (POST, PUT, PATCH, DELETE): Solo admins
         """
         if self.action in ['list', 'retrieve']:
             permission_classes = [permissions.AllowAny]
+        elif self.action == 'search_by_voice':
+            permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
@@ -105,6 +108,144 @@ class ProductViewSet(viewsets.ModelViewSet):
     @method_decorator(cache_page(60 * 2))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
+    
+    @action(detail=False, methods=['post'], url_path='search_by_voice', permission_classes=[permissions.IsAuthenticated])
+    def search_by_voice(self, request):
+        """
+        Búsqueda de productos mediante comando de voz en lenguaje natural.
+        
+        POST /api/shop/products/search_by_voice/
+        
+        Body:
+        {
+            "text": "buscar laptops baratas en stock"
+        }
+        
+        Returns:
+        {
+            "success": true,
+            "query": "buscar laptops baratas en stock",
+            "interpretation": "Buscando: laptops | Orden: precio ascendente | Solo disponibles",
+            "products": [...],
+            "total_results": 5,
+            "confidence": 0.85,
+            "filters_applied": {
+                "search": "laptops",
+                "ordering": "price",
+                "in_stock": true
+            }
+        }
+        
+        Ejemplos de comandos:
+        - "buscar refrigeradores"
+        - "laptops baratas"
+        - "productos entre 100 y 500 dólares"
+        - "refrigeradores en stock"
+        - "mostrar productos de cocina disponibles"
+        """
+        from .product_voice_parser import ProductVoiceParser
+        from .product_search_engine import ProductSearchEngine
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # Validar que se envió el texto
+        text = request.data.get('text', '').strip()
+        
+        if not text:
+            return Response({
+                'success': False,
+                'error': 'El campo "text" es requerido',
+                'example': {
+                    'text': 'buscar laptops baratas'
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"🎤 Búsqueda por voz - Usuario: {request.user.username}")
+        logger.info(f"🎤 Comando: '{text}'")
+        
+        try:
+            # 1. Parsear el comando de voz
+            parser = ProductVoiceParser()
+            parsed_result = parser.parse(text)
+            
+            if not parsed_result['success']:
+                return Response({
+                    'success': False,
+                    'query': text,
+                    'error': parsed_result.get('error', 'No se pudo interpretar el comando'),
+                    'confidence': parsed_result['confidence'],
+                    'suggestions': [
+                        'Intenta con: "buscar [producto]"',
+                        'Ejemplo: "refrigeradores baratos"',
+                        'Ejemplo: "productos de cocina en stock"'
+                    ]
+                }, status=status.HTTP_200_OK)
+            
+            # Verificar nivel de confianza
+            if parsed_result['confidence'] < 0.3:
+                return Response({
+                    'success': False,
+                    'query': text,
+                    'error': 'No estoy seguro de haber entendido el comando correctamente',
+                    'interpretation': parsed_result['interpretation'],
+                    'confidence': parsed_result['confidence'],
+                    'suggestions': [
+                        'Intenta ser más específico',
+                        'Ejemplo: "buscar laptops"',
+                        'Ejemplo: "productos baratos en stock"'
+                    ]
+                }, status=status.HTTP_200_OK)
+            
+            logger.info(f"✓ Parsing exitoso - Confianza: {parsed_result['confidence']:.2%}")
+            logger.info(f"✓ Interpretación: {parsed_result['interpretation']}")
+            
+            # 2. Ejecutar búsqueda
+            search_engine = ProductSearchEngine()
+            search_result = search_engine.search(
+                search_term=parsed_result['search_term'],
+                filters=parsed_result['filters'],
+                user=request.user
+            )
+            
+            # 3. Construir respuesta
+            response_data = {
+                'success': True,
+                'query': text,
+                'interpretation': parsed_result['interpretation'],
+                'products': search_result['products'],
+                'total_results': search_result['total_results'],
+                'confidence': parsed_result['confidence'],
+                'filters_applied': search_result['filters_applied']
+            }
+            
+            # Agregar sugerencias si no hay resultados
+            if search_result['total_results'] == 0:
+                response_data['message'] = 'No se encontraron productos con estos criterios'
+                response_data['suggestions'] = [
+                    'Intenta ampliar los criterios de búsqueda',
+                    'Prueba sin filtros de precio',
+                    'Busca en otras categorías'
+                ]
+                
+                # Intentar obtener sugerencias
+                if parsed_result['search_term']:
+                    suggestions = search_engine.get_suggestions(parsed_result['search_term'])
+                    if suggestions:
+                        response_data['similar_products'] = suggestions
+            
+            logger.info(f"✅ Búsqueda completada - {search_result['total_results']} resultados")
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ Error en búsqueda por voz: {str(e)}", exc_info=True)
+            return Response({
+                'success': False,
+                'query': text,
+                'error': 'Error interno al procesar el comando',
+                'detail': str(e) if request.user.is_staff else 'Contacte al administrador'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def upload_image(self, request, pk=None):
