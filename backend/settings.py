@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'sales',
     'notifications',
     'voice_commands',
+    'claims',  # ✅ Nueva app de reclamaciones
 ]
 
 MIDDLEWARE = [

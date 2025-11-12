@@ -44,6 +44,10 @@ class Notification(models.Model):
         PRODUCT_CREATED = 'PRODUCT_CREATED', 'Producto Creado'
         REPORT_GENERATED = 'REPORT_GENERATED', 'Reporte Generado'
         ML_PREDICTION = 'ML_PREDICTION', 'Predicción ML'
+        CLAIM_CREATED = 'CLAIM_CREATED', 'Reclamo Creado'
+        CLAIM_UPDATED = 'CLAIM_UPDATED', 'Reclamo Actualizado'
+        CLAIM_ASSIGNED = 'CLAIM_ASSIGNED', 'Reclamo Asignado'
+        CLAIM_RESOLVED = 'CLAIM_RESOLVED', 'Reclamo Resuelto'
         SYSTEM = 'SYSTEM', 'Sistema'
         CUSTOM = 'CUSTOM', 'Personalizado'
 
@@ -88,6 +92,15 @@ class Notification(models.Model):
         self.sent_at = timezone.now()
         if message_id:
             self.fcm_message_id = message_id
+        self.save()
+    
+    def mark_as_delivered(self):
+        """
+        Marca la notificación como enviada (sin Firebase).
+        Útil para notificaciones guardadas localmente sin envío push.
+        """
+        self.status = self.Status.SENT
+        self.sent_at = timezone.now()
         self.save()
 
     def mark_as_failed(self, error_message):
