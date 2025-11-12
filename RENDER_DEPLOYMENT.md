@@ -1,32 +1,36 @@
-# Despliegue en Render.com
+# Despliegue en Render.com - Configuración Manual
 
-Este proyecto Django está configurado para desplegarse en Render.com.
+Este proyecto Django está listo para desplegarse en Render.com usando configuración manual.
 
-## Pasos para Desplegar
+## 🚀 Pasos para Desplegar
 
-### 1. Preparar el Repositorio
-```bash
-git add .
-git commit -m "chore: Configuración para producción en Render"
-git push origin main
-```
-
-### 2. Crear Servicio Web en Render
+### 1. Crear Servicio Web en Render
 
 1. Ve a [Render.com](https://render.com) e inicia sesión
 2. Click en "New +" → "Web Service"
-3. Conecta tu repositorio de GitHub: `Paul-11-Riffa/SegundoParcial-Backend`
-4. Configura el servicio:
-   - **Name**: segundoparcial-backend
+3. Conecta tu repositorio: `Paul-11-Riffa/SegundoParcial-Backend`
+4. Configura:
+   - **Name**: `segundoparcial-backend`
    - **Region**: Oregon (US West)
-   - **Branch**: main
+   - **Branch**: `main`
    - **Runtime**: Python 3
-   - **Build Command**: `./build.sh`
-   - **Start Command**: `gunicorn backend.wsgi:application`
+   - **Python Version**: 3.13.4
+
+### 2. Configurar Build & Start Commands
+
+**Build Command** (copia exactamente):
+```bash
+pip install --upgrade pip && pip install -r requirements.txt && python manage.py migrate --no-input && python manage.py collectstatic --no-input --clear
+```
+
+**Start Command** (copia exactamente):
+```bash
+gunicorn backend.wsgi:application
+```
 
 ### 3. Configurar Variables de Entorno
 
-En Render Dashboard → tu servicio → Environment, agrega:
+En Render Dashboard → Environment, agrega TODAS estas variables:
 
 ```bash
 # Django
@@ -80,7 +84,17 @@ Render automáticamente desplegará tu aplicación cuando hagas push a `main`.
 gunicorn backend.wsgi:application
 ```
 
-**NO uses**: `gunicorn app:app` (eso es para Flask)
+**NO uses**: `gunicorn app:app` (eso es para Flask, NO para Django)
+
+## ✅ Checklist Final
+
+Antes de hacer deploy, verifica en Render Dashboard:
+
+- [ ] **Build Command** = `pip install --upgrade pip && pip install -r requirements.txt && python manage.py migrate --no-input && python manage.py collectstatic --no-input --clear`
+- [ ] **Start Command** = `gunicorn backend.wsgi:application`
+- [ ] **ALLOWED_HOSTS** contiene tu dominio de Render (ej: `segundoparcial-backend.onrender.com`)
+- [ ] Todas las variables de entorno configuradas (SECRET_KEY, DB_*, etc.)
+- [ ] **DEBUG** = `False`
 
 ## Estructura del Proyecto
 
