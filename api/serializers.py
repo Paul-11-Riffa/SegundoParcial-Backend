@@ -47,12 +47,26 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
     # --- MÉTODO create AÑADIDO ---
     def create(self, validated_data):
-        profile_data = validated_data.pop('profile')
-        # Usamos create_user para hashear la contraseña correctamente
-        user = User.objects.create_user(**validated_data)
-
-        # Asignamos el rol del perfil
-        Profile.objects.filter(user=user).update(**profile_data)
+        # Extraer profile_data si existe (es opcional)
+        profile_data = validated_data.pop('profile', None)
+        
+        # Extraer password
+        password = validated_data.pop('password', None)
+        
+        # Crear usuario con contraseña hasheada
+        if password:
+            user = User.objects.create_user(password=password, **validated_data)
+        else:
+            # Si no se proporciona contraseña, usar una temporal
+            user = User.objects.create_user(password='temp_password_123', **validated_data)
+        
+        # Actualizar el perfil que fue creado automáticamente por la señal
+        if profile_data:
+            # El perfil ya existe gracias a la señal post_save
+            profile = user.profile
+            for key, value in profile_data.items():
+                setattr(profile, key, value)
+            profile.save()
 
         return user
 
