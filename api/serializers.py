@@ -36,7 +36,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
-    profile = ProfileSerializer()
+    profile = ProfileSerializer(required=False)  # Hacer profile opcional
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
