@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',  # Cloudinary para media files
+    'cloudinary',  # Cloudinary
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
@@ -224,6 +226,9 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://10.0.2.2:8000',  # Para emulador Android
+    # Producción
+    'https://segundoparcial-backend.onrender.com',
+    'https://segundo-parcial-frontend.vercel.app',
 ]
 
 # En producción, estas deben ser True si habilitas CSRF
@@ -295,3 +300,26 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
     'GOOGLE_CLOUD_CREDENTIALS_PATH',
     default=str(BASE_DIR / 'google-cloud-credentials.json')
 )
+ 
+ # ======================================
+# CLOUDINARY CONFIGURATION (Media Storage)
+# ======================================
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+
+# Usar Cloudinary solo en producción
+if not DEBUG:
+    # Producción: Usar Cloudinary para media files
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    CLOUDINARY_URL = config('CLOUDINARY_URL', default='')
+else:
+    # Desarrollo: Usar almacenamiento local
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
