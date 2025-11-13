@@ -14,6 +14,14 @@ from pathlib import Path
 from decouple import config
 import dj_database_url
 
+# Importar Cloudinary al inicio (CRÍTICO para producción)
+try:
+    import cloudinary
+    import cloudinary.uploader
+    import cloudinary.api
+except ImportError:
+    cloudinary = None
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -48,9 +56,10 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    # ⚠️ CRÍTICO: cloudinary_storage DEBE ir ANTES de staticfiles
+    'cloudinary_storage',  # Cloudinary storage backend
+    'cloudinary',  # Cloudinary core
     'django.contrib.staticfiles',
-    'cloudinary_storage',  # Cloudinary para media files
-    'cloudinary',  # Cloudinary
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
@@ -176,9 +185,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # WhiteNoise configuration for static files in production
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Media files (uploaded by users)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files configuration moved to end of file (after Cloudinary setup)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -305,21 +312,25 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
 # CLOUDINARY CONFIGURATION (Media Storage)
 # ======================================
 
-# Configurar Cloudinary solo en producción
+# Configuración de Cloudinary (siempre definir, se usa solo en producción)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+
+# En producción, usar Cloudinary como storage backend
 if not DEBUG:
-    import cloudinary
-    import cloudinary.uploader
-    import cloudinary.api
-    
-    CLOUDINARY_STORAGE = {
-        'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
-        'API_KEY': config('CLOUDINARY_API_KEY', default=''),
-        'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
-    }
-    
-    # Producción: Usar Cloudinary para media files
     DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-    CLOUDINARY_URL = config('CLOUDINARY_URL', default='')
+    
+    # Configurar cloudinary si está disponible
+    if cloudinary:
+        cloudinary.config(
+            cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
+            api_key=config('CLOUDINARY_API_KEY', default=''),
+            api_secret=config('CLOUDINARY_API_SECRET', default=''),
+            secure=True
+        )
 else:
     # Desarrollo: Usar almacenamiento local
     MEDIA_URL = '/media/'
