@@ -54,6 +54,15 @@ class NotificationService:
                 # Crear preferencias por defecto
                 NotificationPreference.objects.create(user=user)
 
+            # Crear registro de notificación siempre (para historial)
+            notification = Notification.objects.create(
+                user=user,
+                notification_type=notification_type,
+                title=title,
+                body=body,
+                data=data
+            )
+
             # Obtener tokens activos del usuario
             device_tokens = DeviceToken.objects.filter(
                 user=user,
@@ -62,20 +71,14 @@ class NotificationService:
 
             if not device_tokens.exists():
                 logger.info(f"Usuario {user.username} no tiene dispositivos registrados")
+                # Marcar como entregada localmente aunque no se enviara push
+                notification.mark_as_delivered()
                 return {
-                    'success': False,
+                    'success': True,
+                    'notification_id': notification.id,
                     'reason': 'no_devices',
-                    'message': 'Usuario no tiene dispositivos registrados'
+                    'message': 'Notificación guardada pero no enviada (sin dispositivos registrados)'
                 }
-
-            # Crear registro de notificación
-            notification = Notification.objects.create(
-                user=user,
-                notification_type=notification_type,
-                title=title,
-                body=body,
-                data=data
-            )
 
             # Obtener lista de tokens
             tokens = [dt.token for dt in device_tokens]

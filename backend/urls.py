@@ -29,8 +29,10 @@ urlpatterns = [
     path('api/notifications/', include('notifications.urls')),
     path('notifications/', include('notifications.urls')),  # Sin /api/ para compatibilidad con frontend
     path('api/', include('voice_commands.urls')),
+    path('api/', include('claims.urls')),  # Sistema de reclamaciones
 ]
 
-# Servir archivos media en desarrollo
+# Servir archivos media solo en desarrollo
+# En producción, Cloudinary sirve los archivos automáticamente
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

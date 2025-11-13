@@ -14,6 +14,14 @@ from pathlib import Path
 from decouple import config
 import dj_database_url
 
+# Importar Cloudinary al inicio (CRÍTICO para producción)
+try:
+    import cloudinary
+    import cloudinary.uploader
+    import cloudinary.api
+except ImportError:
+    cloudinary = None
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,6 +35,49 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,testserver').split(',')
+
+# ======================================
+# CLOUDINARY CONFIGURATION (DEBE IR ANTES DE INSTALLED_APPS)
+# ======================================
+# Configurar cloudinary SIEMPRE (antes de cargar apps)
+if cloudinary:
+    cloudinary.config(
+        cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
+        api_key=config('CLOUDINARY_API_KEY', default=''),
+        api_secret=config('CLOUDINARY_API_SECRET', default=''),
+        secure=True
+    )
+
+# Configuración de Cloudinary Storage (para django-cloudinary-storage)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+
+# DEBUG: Imprimir configuración en producción
+print("=" * 80)
+print("🔍 CLOUDINARY CONFIGURATION DEBUG")
+print("=" * 80)
+print(f"DEBUG = {config('DEBUG', default=False, cast=bool)}")
+print(f"CLOUDINARY_CLOUD_NAME = {config('CLOUDINARY_CLOUD_NAME', default='NOT_SET')}")
+print(f"CLOUDINARY_API_KEY = {config('CLOUDINARY_API_KEY', default='NOT_SET')}")
+print(f"CLOUDINARY_API_SECRET = {'SET' if config('CLOUDINARY_API_SECRET', default='') else 'NOT_SET'}")
+if cloudinary:
+    print(f"Cloudinary module config: cloud_name={cloudinary.config().cloud_name}")
+print("=" * 80)
+
+# En producción, usar Cloudinary como storage backend
+if not DEBUG:
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    print(f"✅ PRODUCCIÓN: DEFAULT_FILE_STORAGE = {DEFAULT_FILE_STORAGE}")
+else:
+    # Desarrollo: Usar almacenamiento local
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
+    print(f"⚠️  DESARROLLO: Usando almacenamiento local")
+
+print("=" * 80)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,192.168.0.103,testserver').split(',')
 
 # Security settings for production
@@ -49,6 +100,9 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    # ⚠️ CRÍTICO: cloudinary_storage DEBE ir ANTES de staticfiles
+    'cloudinary_storage',  # Cloudinary storage backend
+    'cloudinary',  # Cloudinary core
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
@@ -59,11 +113,13 @@ INSTALLED_APPS = [
     'sales',
     'notifications',
     'voice_commands',
+    'claims',  # ✅ Nueva app de reclamaciones
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Debe estar lo más arriba posible
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # WhiteNoise debe ir después de SecurityMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',
@@ -168,10 +224,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files (uploaded by users)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# WhiteNoise configuration for static files in production
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files configuration moved to end of file (after Cloudinary setup)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -219,6 +277,9 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://10.0.2.2:8000',  # Para emulador Android
+    # Producción
+    'https://segundoparcial-backend.onrender.com',
+    'https://segundo-parcial-frontend.vercel.app',
     'http://192.168.0.103:8000',  # IP local para dispositivos reales
 ]
 
@@ -292,3 +353,10 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
     'GOOGLE_CLOUD_CREDENTIALS_PATH',
     default=str(BASE_DIR / 'google-cloud-credentials.json')
 )
+
+# ======================================
+# CLOUDINARY CONFIGURATION (Media Storage)
+# ======================================
+# CLOUDINARY CONFIGURATION MOVED TO TOP OF FILE (before INSTALLED_APPS)
+# See line ~40 for configuration
+# ======================================

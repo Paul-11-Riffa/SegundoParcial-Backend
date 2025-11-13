@@ -1,6 +1,16 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.conf import settings
 import os
+
+
+# Importar cloudinary si está disponible
+try:
+    import cloudinary
+    import cloudinary.uploader
+    CLOUDINARY_AVAILABLE = True
+except ImportError:
+    CLOUDINARY_AVAILABLE = False
 
 
 class Category(models.Model):
@@ -84,13 +94,14 @@ class Product(models.Model):
     @property
     def image_url(self):
         """
-        Devuelve la URL de la imagen si existe, None si no existe o está rota
+        Devuelve la URL de la imagen si existe, None si no existe o está rota.
+        Compatible con almacenamiento local y Cloudinary.
         """
         if self.image:
-            # Verificar si el archivo existe físicamente
             try:
-                if os.path.isfile(self.image.path):
-                    return self.image.url
+                # En producción con Cloudinary, siempre devolver la URL
+                # self.image.url funciona tanto para archivos locales como Cloudinary
+                return self.image.url
             except (ValueError, AttributeError):
                 pass
         return None
@@ -101,11 +112,15 @@ class Product(models.Model):
         return self.image_url is not None
     
     def delete_image(self):
-        """Elimina la imagen física del producto"""
+        """
+        Elimina la imagen física del producto.
+        Compatible con almacenamiento local y Cloudinary.
+        """
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    os.remove(self.image.path)
+                # Django y Cloudinary manejan la eliminación automáticamente
+                # No necesitamos verificar os.path.isfile() en producción
+                self.image.delete(save=False)
                 self.image = None
                 self.save()
                 return True
@@ -165,6 +180,12 @@ class ProductImage(models.Model):
         upload_to='products/',
         help_text="Archivo de imagen"
     )
+    cloudinary_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="URL de Cloudinary (se genera automáticamente en producción)"
+    )
     order = models.IntegerField(
         default=0,
         help_text="Orden de visualización (menor número = primera)"
@@ -196,26 +217,46 @@ class ProductImage(models.Model):
     
     def save(self, *args, **kwargs):
         """
-        Override save para asegurar que solo hay una imagen principal por producto.
+        Override save para:
+        1. Subir imagen a Cloudinary en producción
+        2. Asegurar que solo hay una imagen principal por producto
         """
+        # Si esta imagen se marca como principal, quitar la marca de las demás
         if self.is_primary:
-            # Si esta imagen se marca como principal, quitar la marca de las demás
             ProductImage.objects.filter(
                 product=self.product,
                 is_primary=True
             ).exclude(id=self.id).update(is_primary=False)
+        
+        # En producción, subir a Cloudinary
+        if not settings.DEBUG and CLOUDINARY_AVAILABLE and self.image:
+            try:
+                # Subir a Cloudinary
+                result = cloudinary.uploader.upload(
+                    self.image,
+                    folder="products",
+                    resource_type="image",
+                    allowed_formats=["jpg", "jpeg", "png", "webp", "gif"],
+                )
+                
+                # Guardar URL de Cloudinary
+                self.cloudinary_url = result.get('secure_url')
+                print(f"✅ Imagen subida a Cloudinary: {self.cloudinary_url}")
+            
+            except Exception as e:
+                print(f"❌ Error subiendo a Cloudinary: {e}")
         
         super().save(*args, **kwargs)
     
     def delete(self, *args, **kwargs):
         """
         Override delete para eliminar el archivo físico.
+        Compatible con almacenamiento local y Cloudinary.
         """
-        # Eliminar archivo físico
+        # Eliminar archivo (Django/Cloudinary lo manejan automáticamente)
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    os.remove(self.image.path)
+                self.image.delete(save=False)
             except Exception:
                 pass
         
@@ -224,14 +265,20 @@ class ProductImage(models.Model):
     @property
     def image_url(self):
         """
-        Devuelve la URL de la imagen si existe físicamente.
+        Devuelve la URL de la imagen.
+        En producción devuelve la URL de Cloudinary, en desarrollo la URL local.
         """
+        # En producción, usar URL de Cloudinary si existe
+        if not settings.DEBUG and self.cloudinary_url:
+            return self.cloudinary_url
+        
+        # En desarrollo o si no hay URL de Cloudinary, usar la URL del archivo
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    return self.image.url
+                return self.image.url
             except (ValueError, AttributeError):
                 pass
+        
         return None
     
     def clean(self):

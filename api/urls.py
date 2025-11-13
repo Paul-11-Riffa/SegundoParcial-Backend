@@ -11,8 +11,12 @@ from .views import (
     PasswordResetConfirmView,
     ClientListView
 )
+from .cloudinary_check import cloudinary_status
 
 urlpatterns = [
+    # --- Diagnóstico (TEMPORAL) ---
+    path('cloudinary-status/', cloudinary_status, name='cloudinary-status'),
+    
     # --- Autenticación ---
     path('register/', register_view, name='register'),
     path('login/', login_view, name='login'),
