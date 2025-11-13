@@ -25,27 +25,20 @@ class ProductImageSerializer(serializers.ModelSerializer):
             'id',
             'image',
             'image_url',
+            'cloudinary_url',
             'order',
             'is_primary',
             'alt_text',
             'created_at'
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['created_at', 'cloudinary_url']
     
     def get_image_url(self, obj):
         """
-        Devuelve la URL completa de la imagen si existe.
-        Compatible con almacenamiento local y Cloudinary.
+        Devuelve la URL de la imagen (Cloudinary en producción, local en desarrollo).
         """
-        if obj.image:
-            try:
-                request = self.context.get('request')
-                if request:
-                    return request.build_absolute_uri(obj.image.url)
-                return obj.image.url
-            except (ValueError, AttributeError):
-                pass
-        return None
+        # Usar el property image_url del modelo que maneja Cloudinary
+        return obj.image_url
     
     def validate_image(self, value):
         """
