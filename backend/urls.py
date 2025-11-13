@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/', include('claims.urls')),  # Sistema de reclamaciones
 ]
 
-# Servir archivos media en desarrollo
+# Servir archivos media solo en desarrollo
+# En producción, Cloudinary sirve los archivos automáticamente
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
