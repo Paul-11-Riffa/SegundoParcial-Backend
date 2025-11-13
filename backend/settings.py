@@ -27,6 +27,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,testserver').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,192.168.0.103,testserver').split(',')
 
 # Security settings for production
 if not DEBUG:
@@ -218,6 +219,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://10.0.2.2:8000',  # Para emulador Android
+    'http://192.168.0.103:8000',  # IP local para dispositivos reales
 ]
 
 # En producción, estas deben ser True si habilitas CSRF
@@ -231,6 +233,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',  # Por defecto requiere autenticación
+        'rest_framework.permissions.AllowAny',  # Permite acceso público por defecto
     ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_PARSER_CLASSES': [
