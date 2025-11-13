@@ -304,18 +304,19 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
 # ======================================
 # CLOUDINARY CONFIGURATION (Media Storage)
 # ======================================
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
 
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
-    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
-    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
-}
-
-# Usar Cloudinary solo en producción
+# Configurar Cloudinary solo en producción
 if not DEBUG:
+    import cloudinary
+    import cloudinary.uploader
+    import cloudinary.api
+    
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+        'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+        'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+    }
+    
     # Producción: Usar Cloudinary para media files
     DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
     CLOUDINARY_URL = config('CLOUDINARY_URL', default='')
