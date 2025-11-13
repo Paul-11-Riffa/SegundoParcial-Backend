@@ -36,6 +36,33 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,testserver').split(',')
 
+# ======================================
+# CLOUDINARY CONFIGURATION (DEBE IR ANTES DE INSTALLED_APPS)
+# ======================================
+# Configuración de Cloudinary (siempre definir, se usa solo en producción)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+
+# En producción, usar Cloudinary como storage backend
+if not DEBUG:
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    
+    # Configurar cloudinary si está disponible
+    if cloudinary:
+        cloudinary.config(
+            cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
+            api_key=config('CLOUDINARY_API_KEY', default=''),
+            api_secret=config('CLOUDINARY_API_SECRET', default=''),
+            secure=True
+        )
+else:
+    # Desarrollo: Usar almacenamiento local
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
+
 # Security settings for production
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
@@ -311,27 +338,6 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
 # ======================================
 # CLOUDINARY CONFIGURATION (Media Storage)
 # ======================================
-
-# Configuración de Cloudinary (siempre definir, se usa solo en producción)
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
-    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
-    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
-}
-
-# En producción, usar Cloudinary como storage backend
-if not DEBUG:
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-    
-    # Configurar cloudinary si está disponible
-    if cloudinary:
-        cloudinary.config(
-            cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
-            api_key=config('CLOUDINARY_API_KEY', default=''),
-            api_secret=config('CLOUDINARY_API_SECRET', default=''),
-            secure=True
-        )
-else:
-    # Desarrollo: Usar almacenamiento local
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+# CLOUDINARY CONFIGURATION MOVED TO TOP OF FILE (before INSTALLED_APPS)
+# See line ~40 for configuration
+# ======================================
