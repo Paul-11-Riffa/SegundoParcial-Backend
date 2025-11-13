@@ -84,13 +84,14 @@ class Product(models.Model):
     @property
     def image_url(self):
         """
-        Devuelve la URL de la imagen si existe, None si no existe o está rota
+        Devuelve la URL de la imagen si existe, None si no existe o está rota.
+        Compatible con almacenamiento local y Cloudinary.
         """
         if self.image:
-            # Verificar si el archivo existe físicamente
             try:
-                if os.path.isfile(self.image.path):
-                    return self.image.url
+                # En producción con Cloudinary, siempre devolver la URL
+                # self.image.url funciona tanto para archivos locales como Cloudinary
+                return self.image.url
             except (ValueError, AttributeError):
                 pass
         return None
@@ -101,11 +102,15 @@ class Product(models.Model):
         return self.image_url is not None
     
     def delete_image(self):
-        """Elimina la imagen física del producto"""
+        """
+        Elimina la imagen física del producto.
+        Compatible con almacenamiento local y Cloudinary.
+        """
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    os.remove(self.image.path)
+                # Django y Cloudinary manejan la eliminación automáticamente
+                # No necesitamos verificar os.path.isfile() en producción
+                self.image.delete(save=False)
                 self.image = None
                 self.save()
                 return True
@@ -210,12 +215,12 @@ class ProductImage(models.Model):
     def delete(self, *args, **kwargs):
         """
         Override delete para eliminar el archivo físico.
+        Compatible con almacenamiento local y Cloudinary.
         """
-        # Eliminar archivo físico
+        # Eliminar archivo (Django/Cloudinary lo manejan automáticamente)
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    os.remove(self.image.path)
+                self.image.delete(save=False)
             except Exception:
                 pass
         
@@ -225,11 +230,13 @@ class ProductImage(models.Model):
     def image_url(self):
         """
         Devuelve la URL de la imagen si existe físicamente.
+        Compatible con almacenamiento local y Cloudinary.
         """
         if self.image:
             try:
-                if os.path.isfile(self.image.path):
-                    return self.image.url
+                # En producción con Cloudinary, siempre devolver la URL
+                # self.image.url funciona tanto para archivos locales como Cloudinary
+                return self.image.url
             except (ValueError, AttributeError):
                 pass
         return None

@@ -34,16 +34,16 @@ class ProductImageSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         """
-        Devuelve la URL completa de la imagen si existe físicamente.
+        Devuelve la URL completa de la imagen si existe.
+        Compatible con almacenamiento local y Cloudinary.
         """
         if obj.image:
             try:
-                if os.path.isfile(obj.image.path):
-                    request = self.context.get('request')
-                    if request:
-                        return request.build_absolute_uri(obj.image.url)
-                    return obj.image.url
-            except (ValueError, AttributeError, FileNotFoundError):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(obj.image.url)
+                return obj.image.url
+            except (ValueError, AttributeError):
                 pass
         return None
     
@@ -128,18 +128,17 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         """
-        Devuelve la URL de la imagen legacy solo si existe físicamente.
+        Devuelve la URL de la imagen legacy si existe.
+        Compatible con almacenamiento local y Cloudinary.
         Evita errores 404 en el frontend.
         """
         if obj.image:
             try:
-                # Verificar si el archivo existe
-                if os.path.isfile(obj.image.path):
-                    request = self.context.get('request')
-                    if request:
-                        return request.build_absolute_uri(obj.image.url)
-                    return obj.image.url
-            except (ValueError, AttributeError, FileNotFoundError):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(obj.image.url)
+                return obj.image.url
+            except (ValueError, AttributeError):
                 pass
         return None
     
@@ -162,19 +161,18 @@ class ProductSerializer(serializers.ModelSerializer):
         # 3. Si no hay imágenes nuevas, usar la imagen legacy
         if obj.image:
             try:
-                if os.path.isfile(obj.image.path):
-                    request = self.context.get('request')
-                    image_url = request.build_absolute_uri(obj.image.url) if request else obj.image.url
-                    return {
-                        'id': None,
-                        'image': obj.image.url,
-                        'image_url': image_url,
-                        'order': 0,
-                        'is_primary': True,
-                        'alt_text': obj.name,
-                        'created_at': None
-                    }
-            except (ValueError, AttributeError, FileNotFoundError):
+                request = self.context.get('request')
+                image_url = request.build_absolute_uri(obj.image.url) if request else obj.image.url
+                return {
+                    'id': None,
+                    'image': obj.image.url,
+                    'image_url': image_url,
+                    'order': 0,
+                    'is_primary': True,
+                    'alt_text': obj.name,
+                    'created_at': None
+                }
+            except (ValueError, AttributeError):
                 pass
         
         return None
@@ -182,6 +180,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_all_image_urls(self, obj):
         """
         Devuelve una lista simple de URLs de todas las imágenes.
+        Compatible con almacenamiento local y Cloudinary.
         Útil para galerías simples sin metadatos adicionales.
         """
         urls = []
@@ -191,19 +190,17 @@ class ProductSerializer(serializers.ModelSerializer):
         for img in obj.images.order_by('order'):
             if img.image:
                 try:
-                    if os.path.isfile(img.image.path):
-                        url = request.build_absolute_uri(img.image.url) if request else img.image.url
-                        urls.append(url)
-                except (ValueError, AttributeError, FileNotFoundError):
+                    url = request.build_absolute_uri(img.image.url) if request else img.image.url
+                    urls.append(url)
+                except (ValueError, AttributeError):
                     pass
         
         # Si no hay imágenes nuevas, agregar la imagen legacy
         if not urls and obj.image:
             try:
-                if os.path.isfile(obj.image.path):
-                    url = request.build_absolute_uri(obj.image.url) if request else obj.image.url
-                    urls.append(url)
-            except (ValueError, AttributeError, FileNotFoundError):
+                url = request.build_absolute_uri(obj.image.url) if request else obj.image.url
+                urls.append(url)
+            except (ValueError, AttributeError):
                 pass
         
         return urls
@@ -239,15 +236,15 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         """
-        Actualización personalizada para manejar imágenes correctamente
+        Actualización personalizada para manejar imágenes correctamente.
+        Compatible con almacenamiento local y Cloudinary.
         """
         # Si se envía una nueva imagen, eliminar la anterior
         if 'image' in validated_data and validated_data['image']:
             if instance.image:
                 try:
-                    # Eliminar imagen anterior si existe
-                    if os.path.isfile(instance.image.path):
-                        os.remove(instance.image.path)
+                    # Django y Cloudinary manejan la eliminación automáticamente
+                    instance.image.delete(save=False)
                 except Exception:
                     pass
         
