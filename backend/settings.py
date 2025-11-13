@@ -300,8 +300,8 @@ GOOGLE_CLOUD_CREDENTIALS_PATH = config(
     'GOOGLE_CLOUD_CREDENTIALS_PATH',
     default=str(BASE_DIR / 'google-cloud-credentials.json')
 )
- 
- # ======================================
+
+# ======================================
 # CLOUDINARY CONFIGURATION (Media Storage)
 # ======================================
 import cloudinary
