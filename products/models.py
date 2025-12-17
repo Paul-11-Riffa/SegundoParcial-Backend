@@ -266,13 +266,13 @@ class ProductImage(models.Model):
     def image_url(self):
         """
         Devuelve la URL de la imagen.
-        En producción devuelve la URL de Cloudinary, en desarrollo la URL local.
+        Prioritiza la URL de Cloudinary si está disponible (funciona en desarrollo y producción).
         """
-        # En producción, usar URL de Cloudinary si existe
-        if not settings.DEBUG and self.cloudinary_url:
+        # Si hay URL de Cloudinary disponible, usarla (funciona en desarrollo y producción)
+        if self.cloudinary_url:
             return self.cloudinary_url
         
-        # En desarrollo o si no hay URL de Cloudinary, usar la URL del archivo
+        # Si no hay URL de Cloudinary, usar la URL del archivo (solo local)
         if self.image:
             try:
                 return self.image.url

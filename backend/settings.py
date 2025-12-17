@@ -67,15 +67,17 @@ if cloudinary:
     print(f"Cloudinary module config: cloud_name={cloudinary.config().cloud_name}")
 print("=" * 80)
 
-# En producción, usar Cloudinary como storage backend
-if not DEBUG:
+# Configuración de almacenamiento para archivos multimedia
+# Si está configurado Cloudinary, usarlo incluso en desarrollo
+if cloudinary and CLOUDINARY_STORAGE.get('CLOUD_NAME'):
     DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-    print(f"✅ PRODUCCIÓN: DEFAULT_FILE_STORAGE = {DEFAULT_FILE_STORAGE}")
+    print(f"CLOUDINARY: DEFAULT_FILE_STORAGE = {DEFAULT_FILE_STORAGE}")
+    # En este caso no se define MEDIA_URL ni MEDIA_ROOT porque Cloudinary los maneja
 else:
     # Desarrollo: Usar almacenamiento local
     MEDIA_URL = '/media/'
     MEDIA_ROOT = BASE_DIR / 'media'
-    print(f"⚠️  DESARROLLO: Usando almacenamiento local")
+    print(f"DESARROLLO: Usando almacenamiento local")
 
 print("=" * 80)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,10.0.2.2,192.168.0.103,testserver').split(',')
