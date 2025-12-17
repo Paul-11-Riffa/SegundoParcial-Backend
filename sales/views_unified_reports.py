@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from django.http import HttpResponse
 from api.permissions import IsAdminUser
+from datetime import datetime  # 🎯 AGREGADO
 
 from .intelligent_report_router import (
     parse_intelligent_command,
@@ -15,7 +16,9 @@ from .intelligent_report_router import (
 )
 from .report_generator import ReportGenerator
 from .advanced_reports import AdvancedReportGenerator
+from .specific_report_generator import SpecificReportGenerator
 from .excel_exporter import export_to_excel
+from .advanced_pdf_exporter import export_to_advanced_pdf  # 🎨 NUEVO
 
 
 class UnifiedReportListView(views.APIView):
@@ -105,12 +108,20 @@ class UnifiedIntelligentReportView(views.APIView):
     def _generate_report(self, parsed):
         """
         Genera el reporte según el tipo identificado.
+        
+        🎯 MEJORADO: Ahora soporta reportes ultra-específicos (clientes, productos, etc.)
         """
-        endpoint_type = parsed['endpoint_type']
-        params = parsed['params']
+        endpoint_type = parsed.get('endpoint_type')
+        report_type = parsed.get('report_type')
+        params = parsed.get('params', {})
+
+        # 🎯 REPORTES ESPECÍFICOS (Clientes, Productos, etc.)
+        if endpoint_type in ['client_specific', 'product_specific', 'price_filtered', 'comparative']:
+            generator = SpecificReportGenerator(report_type, params)
+            return generator.generate()
 
         # REPORTES BÁSICOS DINÁMICOS
-        if endpoint_type == 'basic_dynamic':
+        elif endpoint_type == 'basic_dynamic':
             generator = ReportGenerator(params)
             return generator.generate()
 
@@ -118,16 +129,16 @@ class UnifiedIntelligentReportView(views.APIView):
         elif endpoint_type == 'advanced':
             generator = AdvancedReportGenerator(params)
 
-            if parsed['report_type'] == 'analisis_rfm':
+            if report_type == 'analisis_rfm':
                 return generator.customer_rfm_analysis()
-            elif parsed['report_type'] == 'analisis_abc':
+            elif report_type == 'analisis_abc':
                 return generator.product_abc_analysis()
-            elif parsed['report_type'] == 'comparativo_temporal':
+            elif report_type == 'comparativo_temporal':
                 comparison = params.get('comparison', 'previous_period')
                 return generator.comparative_report(comparison)
-            elif parsed['report_type'] == 'dashboard_ejecutivo':
+            elif report_type == 'dashboard_ejecutivo':
                 return generator.executive_dashboard()
-            elif parsed['report_type'] == 'analisis_inventario':
+            elif report_type == 'analisis_inventario':
                 return generator.inventory_analysis()
 
         # REPORTES ML (Predicciones)
@@ -248,72 +259,18 @@ class UnifiedIntelligentReportView(views.APIView):
 
     def _export_to_pdf(self, report_data, parsed):
         """
-        Exporta el reporte a formato PDF.
+        Exporta el reporte a formato PDF usando el exportador avanzado.
+        
+        🎨 MEJORADO: Ahora usa AdvancedPDFExporter con diseño profesional
         """
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import letter, landscape
-        from reportlab.lib import colors
-        from reportlab.platypus import Table, TableStyle
-        from reportlab.lib.units import inch
-
-        response = HttpResponse(content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="reporte_{parsed["report_type"]}.pdf"'
-
-        p = canvas.Canvas(response, pagesize=landscape(letter) if len(report_data.get('headers', [])) > 5 else letter)
-        width, height = landscape(letter) if len(report_data.get('headers', [])) > 5 else letter
-
-        # Título
-        p.setFont("Helvetica-Bold", 18)
-        p.drawString(50, height - 50, report_data.get('title', 'Reporte'))
-
-        # Subtítulo
-        p.setFont("Helvetica", 12)
-        p.drawString(50, height - 75, report_data.get('subtitle', ''))
-
-        y_position = height - 100
-
-        # Tabla
-        headers = report_data.get('headers', [])
-        rows = report_data.get('rows', [])
-
-        if headers and rows:
-            table_data = [headers] + rows[:20]  # Limitar a 20 filas
-
-            # Calcular anchos de columna dinámicamente
-            num_cols = len(headers)
-            col_width = (width - 100) / num_cols
-            col_widths = [col_width] * num_cols
-
-            table = Table(table_data, colWidths=col_widths)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A222E')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ]))
-
-            table_height = table.wrap(width, height)[1]
-            table.drawOn(p, 50, y_position - table_height - 20)
-
-            y_position -= table_height + 40
-
-        # Totales
-        totals = report_data.get('totals', {})
-        if totals:
-            p.setFont("Helvetica-Bold", 11)
-            for key, value in totals.items():
-                label = key.replace('_', ' ').title()
-                p.drawString(50, y_position, f"{label}: {value}")
-                y_position -= 20
-
-        p.showPage()
-        p.save()
-
+        from django.http import HttpResponse
+        
+        # Usar exportador avanzado
+        pdf_buffer = export_to_advanced_pdf(report_data, parsed)
+        
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="reporte_{parsed.get("report_type", "general")}_{datetime.now().strftime("%Y%m%d")}.pdf"'
+        
         return response
 
     def _export_to_excel(self, report_data, parsed):

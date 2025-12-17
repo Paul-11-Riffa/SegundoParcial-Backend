@@ -2,11 +2,14 @@
 """
 Sistema Unificado Inteligente de Reportes
 Procesa comandos en lenguaje natural y enruta al reporte correcto.
+
+🎯 VERSIÓN MEJORADA: Ahora con AdvancedCommandParser integrado para reportes ultra-específicos
 """
 
 import re
 from datetime import datetime, timedelta
 from django.utils import timezone
+from .advanced_command_parser import parse_advanced_command
 
 
 class IntelligentReportRouter:
@@ -18,7 +21,7 @@ class IntelligentReportRouter:
     - Si incluye predicciones ML o datos históricos
     """
 
-    # Catálogo de reportes disponibles
+    # Catálogo de reportes disponibles (AMPLIADO 5x)
     AVAILABLE_REPORTS = {
         'ventas_basico': {
             'name': 'Reporte Básico de Ventas',
@@ -28,6 +31,97 @@ class IntelligentReportRouter:
             'formats': ['json', 'pdf', 'excel'],
             'endpoint_type': 'basic_dynamic'
         },
+        # ========== REPORTES ESPECÍFICOS DE CLIENTES ==========
+        'compras_cliente': {
+            'name': 'Compras de Cliente Específico',
+            'description': 'Historial completo de compras de un cliente en particular',
+            'keywords': ['compras del cliente', 'compras que realizo', 'historial de', 'pedidos del cliente'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'client_specific',
+            'requires': ['customer_id']
+        },
+        'productos_comprados_por_cliente': {
+            'name': 'Productos Comprados por Cliente',
+            'description': 'Lista de productos que ha comprado un cliente',
+            'keywords': ['productos que compro', 'que compro el cliente', 'articulos comprados'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'client_specific',
+            'requires': ['customer_id']
+        },
+        'analisis_comportamiento_cliente': {
+            'name': 'Análisis de Comportamiento del Cliente',
+            'description': 'Análisis profundo del patrón de compra de un cliente',
+            'keywords': ['analisis de comportamiento', 'perfil de compra', 'patron de cliente'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'client_specific',
+            'requires': ['customer_id']
+        },
+        'timeline_compras_cliente': {
+            'name': 'Timeline de Compras del Cliente',
+            'description': 'Línea de tiempo cronológica de las compras de un cliente',
+            'keywords': ['timeline', 'linea de tiempo', 'cronologia de compras'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'client_specific',
+            'requires': ['customer_id']
+        },
+        # ========== REPORTES ESPECÍFICOS DE PRODUCTOS ==========
+        'clientes_que_compraron_producto': {
+            'name': 'Clientes que Compraron Producto',
+            'description': 'Lista de clientes que compraron un producto específico',
+            'keywords': ['clientes que compraron', 'quienes compraron', 'quien compro'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'product_specific',
+            'requires': ['product_id']
+        },
+        'ventas_producto_especifico': {
+            'name': 'Ventas de Producto Específico',
+            'description': 'Historial de ventas de un producto en particular',
+            'keywords': ['ventas de producto', 'ventas del producto', 'historial del producto'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'product_specific',
+            'requires': ['product_id']
+        },
+        # ========== REPORTES POR RANGO DE PRECIO ==========
+        'ventas_por_rango_precio': {
+            'name': 'Ventas por Rango de Precio',
+            'description': 'Ventas filtradas por rango de precio',
+            'keywords': ['entre', 'mas de', 'menos de', 'precio'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'price_filtered'
+        },
+        'productos_mas_caros_vendidos': {
+            'name': 'Productos Más Caros Vendidos',
+            'description': 'Top productos de mayor precio vendidos',
+            'keywords': ['productos mas caros', 'mas caros vendidos', 'premium vendidos'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'price_filtered'
+        },
+        # ========== REPORTES COMPARATIVOS ==========
+        'comparativa_clientes': {
+            'name': 'Comparativa entre Clientes',
+            'description': 'Compara el comportamiento de compra de múltiples clientes',
+            'keywords': ['comparar clientes', 'comparativa de clientes'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'comparative'
+        },
+        'comparativa_productos': {
+            'name': 'Comparativa entre Productos',
+            'description': 'Compara las ventas de múltiples productos',
+            'keywords': ['comparar productos', 'comparativa de productos'],
+            'supports_ml': False,
+            'formats': ['json', 'pdf', 'excel'],
+            'endpoint_type': 'comparative'
+        },
+        # ========== REPORTES BÁSICOS AMPLIADOS ==========
         'ventas_por_producto': {
             'name': 'Ventas por Producto',
             'description': 'Ventas agrupadas por producto con estadísticas',
@@ -164,23 +258,56 @@ class IntelligentReportRouter:
     def parse(self):
         """
         Analiza el comando y determina el reporte a generar.
+        
+        🎯 NUEVO: Ahora usa AdvancedCommandParser primero para detectar entidades específicas
 
         Returns:
             dict: Resultado del análisis con tipo de reporte y parámetros
         """
-        # 1. Identificar el tipo de reporte
+        # 1. Usar AdvancedCommandParser para detectar entidades específicas
+        advanced_result = parse_advanced_command(self.command)
+        
+        # 2. Si se detectó un tipo de reporte específico con alta confianza, usarlo
+        if advanced_result['confidence'] >= 0.6 and advanced_result['report_type']:
+            # Transferir información del parser avanzado
+            self.result['report_type'] = advanced_result['report_type']
+            self.result['params'].update(advanced_result['filters'])
+            self.result['detected_entities'] = advanced_result['detected_entities']
+            self.result['format'] = advanced_result['format']
+            
+            # Obtener información del catálogo
+            if advanced_result['report_type'] in self.AVAILABLE_REPORTS:
+                report_info = self.AVAILABLE_REPORTS[advanced_result['report_type']]
+                self.result['report_name'] = report_info['name']
+                self.result['report_description'] = report_info['description']
+                self.result['endpoint_type'] = report_info['endpoint_type']
+                self.result['supports_ml'] = report_info.get('supports_ml', False)
+            
+            self.result['confidence'] = advanced_result['confidence']
+            self.result['interpretation'] = advanced_result['interpretation']
+            self.result['suggestions'] = advanced_result['suggestions']
+            
+            # Agregar texto descriptivo del período si no existe
+            if 'period_text' not in self.result['params']:
+                if advanced_result['detected_entities'].get('date_range'):
+                    self.result['params']['period_text'] = advanced_result['detected_entities']['date_range']['description']
+            
+            return self.result
+        
+        # 3. Fallback al sistema original si el parser avanzado no tuvo alta confianza
+        # Identificar el tipo de reporte (método original)
         self._identify_report_type()
 
-        # 2. Extraer formato de salida
+        # Extraer formato de salida
         self._extract_format()
 
-        # 3. Extraer fechas y rangos
+        # Extraer fechas y rangos
         self._extract_dates()
 
-        # 4. Extraer parámetros adicionales
+        # Extraer parámetros adicionales
         self._extract_additional_params()
 
-        # 5. Validar el resultado
+        # Validar el resultado
         self._validate_result()
 
         return self.result
